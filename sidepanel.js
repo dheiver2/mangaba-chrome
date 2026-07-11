@@ -64,7 +64,7 @@ async function send() {
 
   const bubble = addMsg("assistant", "…");
   try {
-    const headers = { "Content-Type": "application/json" };
+    const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "1" };
     if (cfg.key) headers.Authorization = "Bearer " + cfg.key;
     const resp = await fetch(cfg.url, {
       method: "POST",
