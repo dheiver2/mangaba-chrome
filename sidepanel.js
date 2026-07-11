@@ -66,6 +66,15 @@ async function send() {
   try {
     const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "1" };
     if (cfg.key) headers.Authorization = "Bearer " + cfg.key;
+    if (!cfg.model) {
+      // sem modelo configurado: usa o primeiro que o gateway listar
+      const mResp = await fetch(cfg.url.replace(/\/chat\/completions\/?$/, "/models"), { headers });
+      const first = (await mResp.json()).data?.[0]?.id;
+      if (!first) throw new Error("configure o modelo no ⚙︎ (GET /v1/models não retornou nada)");
+      cfg.model = first;
+      chrome.storage.sync.set({ model: first });
+      $("cfgModel").value = first;
+    }
     const resp = await fetch(cfg.url, {
       method: "POST",
       headers,
