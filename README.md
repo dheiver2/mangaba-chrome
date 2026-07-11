@@ -23,4 +23,4 @@ Para usar via cloudflared, troque a URL nas configurações (⚙︎).
 | `manifest.json` | MV3: side panel, scripting, storage |
 | `background.js` | Service worker: extrai texto da aba ativa |
 | `sidepanel.html/css/js` | UI do chat, config e streaming |
-| `icons/` | Ícones gerados por script (laranja #E94A12) |
+| `icons/` | Logo oficial Mangaba (`logo.svg`) + ícones PNG derivados do símbolo |

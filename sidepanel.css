@@ -15,7 +15,8 @@ header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; background: var(--laranja); color: #fff;
 }
-.logo { font-size: 15px; }
+.logo { font-size: 15px; display: flex; align-items: center; gap: 7px; }
+.logo img { width: 24px; height: 24px; border-radius: 6px; }
 .logo b { font-weight: 800; }
 header button {
   background: none; border: none; color: #fff; font-size: 16px; cursor: pointer;
