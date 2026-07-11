@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Mangaba AI",
+  "version": "1.0.0",
+  "description": "Assistente Mangaba AI no navegador: converse com a IA sobre a página que você está vendo.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Abrir Mangaba AI"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "permissions": ["sidePanel", "activeTab", "scripting", "storage"],
+  "host_permissions": ["http://localhost/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

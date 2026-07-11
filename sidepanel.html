@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Mangaba AI</title>
+<link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+<header>
+  <div class="logo">🥭 <span>Mangaba <b>AI</b></span></div>
+  <button id="btnSettings" title="Configurações">⚙︎</button>
+</header>
+
+<div id="settings" class="hidden">
+  <label>URL do Gateway
+    <input id="cfgUrl" placeholder="http://localhost:8080/v1/chat/completions">
+  </label>
+  <label>Modelo
+    <input id="cfgModel" placeholder="ex.: qwen3-4b">
+  </label>
+  <label>API Key (opcional)
+    <input id="cfgKey" type="password">
+  </label>
+  <button id="btnSave">Salvar</button>
+</div>
+
+<main id="chat">
+  <div class="msg assistant">Olá! Sou a <b>Mangaba</b> 🥭. Posso ler a página atual e responder suas perguntas sobre ela.</div>
+</main>
+
+<footer>
+  <label class="ctx"><input type="checkbox" id="usePage" checked> Usar contexto da página</label>
+  <div class="inputrow">
+    <textarea id="input" rows="2" placeholder="Pergunte algo..."></textarea>
+    <button id="btnSend">➤</button>
+  </div>
+</footer>
+
+<script src="sidepanel.js"></script>
+</body>
+</html>
