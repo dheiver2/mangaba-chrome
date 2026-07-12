@@ -152,8 +152,10 @@ function classificaErro(status, body) {
   return { temp: false, msg: `HTTP ${status}: ${(body || "").replace(/<[^>]+>/g, " ").slice(0, 160)}` };
 }
 
-// chamada não-streaming com retry (usada pelos agentes)
-async function llm(messages, maxTokens = 700) {
+// chamada não-streaming com retry (usada pelos agentes). Usa o abort do agente em TODAS as
+// chamadas (planejador, orquestrador, passos...) para o "parar" interromper na hora.
+async function llm(messages, maxTokens = 700, signal) {
+  signal = signal || (agentRun && agentRun.abort && agentRun.abort.signal);
   const headers = gatewayHeaders();
   await ensureModel(headers);
   let ult = "";
@@ -162,6 +164,7 @@ async function llm(messages, maxTokens = 700) {
       const resp = await fetch(cfg.url, {
         method: "POST",
         headers,
+        signal,
         // cache_prompt: o llama.cpp reaproveita o KV-cache do prefixo comum entre chamadas
         body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0, cache_prompt: true })
       });
@@ -172,9 +175,11 @@ async function llm(messages, maxTokens = 700) {
       }
       return (await resp.json()).choices?.[0]?.message?.content || "";
     } catch (e) {
+      if (e.name === "AbortError") throw e; // parada do usuário: não tenta de novo
       if (e.fatal) throw e;
       if (tent >= 4) throw new Error(`Gateway não respondeu após ${tent} tentativas (${ult || e.message}). Verifique se o Mangaba Gateway e o túnel estão no ar; se trocou de modelo, aguarde ele carregar do HD.`);
       await sleep(1000 * tent); // espera crescente: cobre troca de modelo no USB 2.0
+      if (agentRun && agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" }); // parou durante a espera
     }
   }
 }
@@ -519,7 +524,7 @@ function describeAction(act, label) {
 }
 
 async function runAgent(task) {
-  agentRun = { cancel: false, waiting: null };
+  agentRun = { cancel: false, waiting: null, abort: new AbortController() };
   setStop(true);
   const t0 = Date.now();
   const secs = () => Math.round((Date.now() - t0) / 1000);
@@ -687,6 +692,7 @@ async function runAgent(task) {
       return NAVEGA.includes(act.tool) ? "BREAK" : "NEXT"; // navegação encerra o lote
     }
 
+    if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" }); // parou durante o planejamento
     const maxSteps = cfg.maxSteps || 20;
     for (let passo = 1; passo <= maxSteps; passo++) {
       if (agentRun.cancel) {
@@ -739,7 +745,9 @@ async function runAgent(task) {
           (visited.length > 1 ? `\nPáginas já visitadas: ${visited.slice(-5).join(" → ")}\n` : "") +
           `\nEstado ATUAL da página:\n${contexto}\n` +
           `\nQual a próxima ação? Responda somente o JSON.` }
-      ], 700);
+      ], 700, agentRun.abort.signal);
+
+      if (agentRun.cancel) break; // parou durante a chamada: não executa a ação pendente
 
       const parsed = parseAction(raw);
       let acts;
@@ -785,6 +793,7 @@ async function runAgent(task) {
       if (acts.length > 1) box.add(`⚡ Lote de ${acts.length} ações`);
       // executa o lote; para no 1º sinal de re-observação (navegação/erro/pausa) — evita índices obsoletos
       for (let act of acts) {
+        if (agentRun.cancel) break; // parou no meio do lote: não executa o resto
         // anti-loop de rolagem: rolar não ajuda a "ler" — força a leitura da página inteira
         if (act.tool === "rolar") {
           rolares++;
@@ -808,8 +817,12 @@ async function runAgent(task) {
     addMsg("err", "Não concluí dentro do limite de passos. Refine o pedido ou aumente o limite no ⚙︎.");
   } catch (e) {
     statusTxt = null;
-    status.textContent = `❌ Erro · ${secs()}s`;
-    addMsg("err", "Erro no modo agente: " + e.message);
+    if (agentRun?.cancel || e.name === "AbortError") {
+      status.textContent = `⏹ Parado por você · ${box.n} passos · ${secs()}s`;
+    } else {
+      status.textContent = `❌ Erro · ${secs()}s`;
+      addMsg("err", "Erro no modo agente: " + e.message);
+    }
   } finally {
     clearInterval(tick);
     agentRun = null;
@@ -910,7 +923,7 @@ async function send() {
 }
 
 btnSend.onclick = () => {
-  if (agentRun && !agentRun.waiting) { agentRun.cancel = true; return; }
+  if (agentRun && !agentRun.waiting) { agentRun.cancel = true; agentRun.abort?.abort(); return; }
   send();
 };
 input.addEventListener("keydown", (e) => {
