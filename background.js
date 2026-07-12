@@ -27,13 +27,13 @@ const snapshotFn = () => {
   const els = [];
   let varridos = 0;
   const walk = (root) => {
-    if (!root || els.length >= 90 || varridos > 4000) return;
+    if (!root || els.length >= 45 || varridos > 4000) return;
     for (const el of root.querySelectorAll(SEL)) {
-      if (els.length >= 90) break;
+      if (els.length >= 45) break;
       if (vis(el)) els.push(el);
     }
     for (const el of root.querySelectorAll("*")) {
-      if (els.length >= 90 || ++varridos > 4000) break;
+      if (els.length >= 45 || ++varridos > 4000) break;
       if (el.shadowRoot) walk(el.shadowRoot);
       else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
     }
@@ -72,13 +72,13 @@ const formFn = () => {
   const els = [];
   let varridos = 0;
   const walk = (root) => {
-    if (!root || els.length >= 90 || varridos > 4000) return;
+    if (!root || els.length >= 45 || varridos > 4000) return;
     for (const el of root.querySelectorAll(SEL)) {
-      if (els.length >= 90) break;
+      if (els.length >= 45) break;
       if (vis(el)) els.push(el);
     }
     for (const el of root.querySelectorAll("*")) {
-      if (els.length >= 90 || ++varridos > 4000) break;
+      if (els.length >= 45 || ++varridos > 4000) break;
       if (el.shadowRoot) walk(el.shadowRoot);
       else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
     }

@@ -625,11 +625,11 @@ async function runAgent(task) {
       const res = await tool(act.tool, act.args || {});
       const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
       if (act.tool === "ler" && res?.ok) {
-        leitura = String(res.out).slice(0, 5000);
+        leitura = String(res.out).slice(0, 3500);
         leuAlguma = true;
         feitas.push(`ler → conteúdo obtido (veja acima); se já basta para a tarefa, use "concluir"`);
       } else if (act.tool === "formulario" && res?.ok) {
-        form = String(res.out).slice(0, 3500);
+        form = String(res.out).slice(0, 1800);
         feitas.push(`formulario → mapa obtido (veja "Mapa do formulário"); preencha o que faltar ou pergunte os dados ao usuário`);
       } else {
         feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
