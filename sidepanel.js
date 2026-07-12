@@ -483,7 +483,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [];
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0;
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false;
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -496,16 +496,24 @@ async function runAgent(task) {
   };
 
   try {
-    // plano curto antes de agir
+    // detecta tarefa com N itens ("comente 10 posts", "curta 3 vídeos") p/ decompor e rastrear progresso
+    const nums = (task.match(/\b\d{1,3}\b/g) || []).map(Number);
+    const meta = nums.length ? Math.min(50, Math.max(...nums)) : 0;
+
+    // plano curto antes de agir (decompõe tarefas em lista)
     let plano = [];
     try {
       const p = parseAction(await llm([
-        { role: "system", content: 'Você é o planejador da equipe Mangaba AI. Gere um plano curto (2 a 4 passos) para cumprir a tarefa usando o navegador. Responda SOMENTE com JSON: {"plano":["passo 1","passo 2"]}' },
+        { role: "system", content: 'Você é o planejador da equipe Mangaba AI. Gere um plano CURTO (2 a 5 passos), cada passo uma STRING de uma frase. Se a tarefa tiver vários itens (ex.: "10 perfis"), inclua um passo "repetir para cada um dos N". Responda SOMENTE com JSON onde cada passo é texto simples: {"plano":["passo 1","passo 2"]}' },
         { role: "user", content: task }
-      ], 200));
-      if (Array.isArray(p?.plano)) plano = p.plano.map(String).slice(0, 5);
+      ], 250));
+      // achata qualquer estrutura (o modelo às vezes devolve objetos aninhados em vez de strings)
+      const achata = (x) => Array.isArray(x) ? x.flatMap(achata)
+        : (x && typeof x === "object") ? Object.values(x).flatMap(achata) : [String(x)];
+      if (p?.plano) plano = achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6);
     } catch { /* plano é opcional */ }
     if (plano.length) box.add("🗺️ Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
+    if (meta >= 2) box.add(`🎯 Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
 
     // agente: manual (dropdown) ou orquestrador
     const sel = $("agentSel").value;
@@ -518,7 +526,15 @@ async function runAgent(task) {
       if (act.tool === "digitar") ultimoTexto = String(act.args?.texto ?? "");
       else if (act.tool === "preencher") ultimoTexto = (act.args?.campos || []).map((c) => c.texto).filter(Boolean).join(" | ");
 
-      if (act.tool === "concluir") { finish(act.args?.resposta); return "FINISH"; }
+      if (act.tool === "concluir") {
+        if (meta >= 2 && !metaLembrete) {
+          metaLembrete = true;
+          feitas.push(`ANTES de concluir: a tarefa pedia ${meta} itens. Confira se TODOS os ${meta} foram feitos. Se faltou algum, faça agora; se já fez todos, conclua de novo.`);
+          box.add(`🎯 Conferindo se os ${meta} itens foram feitos`);
+          return "BREAK";
+        }
+        finish(act.args?.resposta); return "FINISH";
+      }
 
       if (act.tool === "olhar") {
         box.add(`${passo}. 👁️ Olhando a página (captura + visão)`);
@@ -613,6 +629,7 @@ async function runAgent(task) {
         { role: "user", content:
           `Tarefa do usuário: ${task}\n` +
           (plano.length ? `\nPlano combinado: ${plano.join("; ")}\n` : "") +
+          (meta >= 2 ? `\nMETA: ${meta} itens no total. Trabalhe UM item por vez; só use "concluir" quando os ${meta} estiverem realmente feitos. Vá contando quantos já completou.\n` : "") +
           (anteriores ? `\nTarefas anteriores nesta conversa:\n${anteriores}\n` : "") +
           `\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n` +
           (leitura ? `\nConteúdo lido da página (ação "ler"):\n${leitura}\n` : "") +
