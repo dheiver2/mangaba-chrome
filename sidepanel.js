@@ -86,6 +86,8 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"ler","args":{}} — obter o texto completo da página atual
 {"tool":"concluir","args":{"resposta":"..."}} — terminar a tarefa e responder ao usuário em PT-BR
 
+IMPORTANTE: sua resposta deve conter apenas UM objeto JSON e começar com "{". Na ação "concluir", seja breve na resposta (máx. ~150 palavras).
+
 Dicas: só use "clicar"/"digitar" em índices [N] que existam na lista de elementos. Para pesquisar na web, navegue direto para https://duckduckgo.com/html/?q=SUA+BUSCA e depois use "ler". Se a página atual não serve para a tarefa, comece com "navegar".
 
 Regras de segurança: NUNCA digite senhas, dados de cartão ou documentos; NUNCA confirme compras, pagamentos ou exclusões. Nesses casos use "concluir" pedindo que o usuário faça essa parte manualmente.`;
@@ -116,6 +118,32 @@ function parseAction(raw) {
 
 const tool = (t, args) => chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args });
 
+const TOOL_NAMES = ["navegar", "clicar", "digitar", "tecla", "rolar", "ler", "concluir"];
+
+// aceita variações que os modelos pequenos produzem:
+// {"tool":"x","args":{...}} | {"tool":"x",...args soltos} | {"x":{...}} | {"concluir":"texto"}
+function normalizeAction(o) {
+  if (!o || typeof o !== "object") return null;
+  if (typeof o.tool === "string") {
+    let args = o.args;
+    if (typeof args === "string") args = o.tool === "concluir" ? { resposta: args } : {};
+    if (!args || typeof args !== "object") { args = { ...o }; delete args.tool; }
+    if (o.tool === "concluir" && typeof args.resposta !== "string") {
+      const s = args.texto ?? args.answer ?? args.mensagem;
+      if (typeof s === "string") args.resposta = s;
+    }
+    return TOOL_NAMES.includes(o.tool) ? { tool: o.tool, args } : null;
+  }
+  for (const t of TOOL_NAMES) {
+    if (t in o) {
+      const v = o[t];
+      const args = v && typeof v === "object" ? v : (t === "concluir" ? { resposta: String(v ?? "") } : {});
+      return { tool: t, args };
+    }
+  }
+  return null;
+}
+
 function fmtSnapshot(s) {
   const els = s.elements.map((e) => `[${e.i}] ${e.tag}${e.tipo ? ":" + e.tipo : ""} "${e.texto}"`).join("\n");
   return `Página: ${s.title} — ${s.url}\nElementos interativos:\n${els}\nTrecho do texto: ${s.trecho}`;
@@ -144,11 +172,23 @@ async function runAgent(task) {
     const raw = await llm([
       { role: "system", content: agentSystem(agent) },
       { role: "user", content: `Tarefa do usuário: ${task}\n\n${contexto}\n${leitura ? `\nConteúdo lido da página (ação "ler"):\n${leitura}\n` : ""}\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n\nQual a próxima ação? Responda somente o JSON.` }
-    ]);
-    const act = parseAction(raw);
+    ], 1200);
+    const act = normalizeAction(parseAction(raw));
     if (!act?.tool) {
-      feitas.push(`resposta inválida ("${raw.slice(0, 60)}...") → envie UM único objeto JSON válido`);
-      addMsg("step", `${passo}. resposta inválida, tentando de novo`);
+      const clean = raw.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```\w*/g, "").trim();
+      // JSON de "concluir" truncado: resgata o texto da resposta
+      const m = clean.match(/"resposta"\s*:\s*"([\s\S]+)/);
+      if (m) {
+        addMsg("assistant", m[1].replace(/\\n/g, "\n").replace(/["}\]]*\s*$/, ""));
+        return;
+      }
+      // modelo respondeu em prosa (sem JSON) depois de já ter lido: trata como resposta final
+      if (!clean.includes("{") && leitura && clean.length > 40) {
+        addMsg("assistant", clean);
+        return;
+      }
+      feitas.push(`resposta inválida ("${clean.slice(0, 60)}...") → envie UM único objeto JSON começando com {`);
+      addMsg("step", `${passo}. resposta inválida (${clean.slice(0, 50)}…), tentando de novo`);
       continue;
     }
     if (act.tool === "concluir") {
