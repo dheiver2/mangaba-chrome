@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mangaba AI — Extensão Chrome</title>
+<meta name="description" content="Assistente brasileira no navegador: chat com contexto da página e agentes de IA que navegam, pesquisam, preenchem formulários e interagem em redes sociais por você.">
+<link rel="icon" href="mark.png">
+<style>
+  :root{
+    --laranja:#F0781E; --laranja-esc:#D95F0E; --creme:#FFFBF3; --pessego:#FDE7D6;
+    --marrom:#3A3129; --borda:#F0DFCC; --suave:#8A7663;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font:16px/1.6 -apple-system,"Segoe UI",Roboto,sans-serif;color:var(--marrom);
+    background:linear-gradient(180deg,var(--creme),var(--pessego));min-height:100vh;
+  }
+  a{color:var(--laranja-esc)}
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px}
+  header{text-align:center;padding:64px 20px 40px}
+  header img{width:96px;height:96px;filter:drop-shadow(0 6px 14px rgba(217,95,14,.25))}
+  h1{font-size:44px;font-weight:800;letter-spacing:-1px;margin:16px 0 4px}
+  h1 .ai{color:var(--laranja)}
+  .sub{font-size:19px;color:var(--suave);max-width:640px;margin:8px auto 0}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px}
+  .btn{
+    display:inline-block;padding:13px 26px;border-radius:12px;font-weight:700;text-decoration:none;
+    background:var(--laranja);color:#fff;box-shadow:0 6px 16px rgba(240,120,30,.3);transition:.15s
+  }
+  .btn:hover{background:var(--laranja-esc);transform:translateY(-1px)}
+  .btn.ghost{background:#fff;color:var(--marrom);border:1px solid var(--borda);box-shadow:none}
+  .badge{display:inline-block;font-size:13px;font-weight:700;color:var(--laranja-esc);
+    background:#fff;border:1px solid var(--borda);border-radius:999px;padding:4px 14px;margin-bottom:8px}
+  section{margin:44px 0}
+  h2{font-size:26px;font-weight:800;margin-bottom:18px;text-align:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .card{background:#fff;border:1px solid var(--borda);border-radius:16px;padding:20px}
+  .card h3{font-size:17px;margin-bottom:6px}
+  .card p{font-size:14.5px;color:var(--suave)}
+  .agents{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .agent{background:#fff;border:1px solid var(--borda);border-radius:999px;padding:8px 16px;font-weight:600;font-size:14px}
+  ol.steps{max-width:640px;margin:0 auto;padding-left:22px}
+  ol.steps li{margin:10px 0;padding-left:6px}
+  code{background:#F8ECDD;border-radius:5px;padding:2px 7px;font:13.5px ui-monospace,Menlo,monospace}
+  .note{background:#FFF8E1;border:1px solid #F2D49B;border-radius:12px;padding:14px 18px;font-size:14px;margin-top:16px}
+  footer{text-align:center;color:var(--suave);font-size:13px;padding:40px 20px 60px}
+  @media (prefers-color-scheme:dark){
+    :root{--creme:#241C15;--pessego:#1A130D;--marrom:#F3E9DE;--borda:#4A3A2C;--suave:#B8A490}
+    .card,.agent,.btn.ghost{background:#2E2419}
+    code{background:#3A2C1D}
+  }
+</style>
+</head>
+<body>
+<header>
+  <img src="mark.png" alt="Mangaba">
+  <h1>mangaba<span class="ai">.ai</span></h1>
+  <p class="sub">Assistente brasileira no seu navegador. Converse sobre a página atual e coloque <b>agentes de IA</b> para navegar, pesquisar, preencher formulários e interagir em redes sociais por você.</p>
+  <div class="cta">
+    <a class="btn" href="mangaba-chrome-v1.8.2.zip" download>⬇ Baixar extensão (v1.8.2)</a>
+    <a class="btn ghost" href="#instalar">Como instalar</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section>
+  <div style="text-align:center"><span class="badge">Manifest V3 · zero dependências · 100% local</span></div>
+  <h2>O que ela faz</h2>
+  <div class="grid">
+    <div class="card"><h3>💬 Chat com a página</h3><p>Lê o conteúdo da aba ativa e responde perguntas sobre ele, com respostas em Markdown e streaming ao vivo.</p></div>
+    <div class="card"><h3>🤖 Modo agente</h3><p>Uma equipe de agentes executa tarefas reais no navegador: navegar, clicar, digitar, rolar e ler — decidindo passo a passo.</p></div>
+    <div class="card"><h3>📝 Formulários</h3><p>Mapeia campos com rótulos e opções, preenche em lote, valida com o próprio site e nunca inventa dados pessoais.</p></div>
+    <div class="card"><h3>🔎 Busca na web</h3><p>Pesquisa em várias fontes, cruza as informações e responde citando os domínios usados.</p></div>
+    <div class="card"><h3>💬 Redes sociais</h3><p>Lê inbox e DMs, redige respostas, curte e comenta — com sua confirmação antes de publicar qualquer coisa.</p></div>
+    <div class="card"><h3>🔐 Login seguro</h3><p>Abre a tela de login e preenche o usuário, mas <b>nunca digita sua senha</b> — você conclui o acesso.</p></div>
+    <div class="card"><h3>👁️ Visão</h3><p>Tira captura da tela e a descreve com modelo de visão quando o texto da página não basta.</p></div>
+    <div class="card"><h3>⚡ Rápida</h3><p>Múltiplas ações por passo, KV-cache, pré-carga do modelo e estabilização de DOM (técnicas do browser-use).</p></div>
+    <div class="card"><h3>🔒 Segura</h3><p>HTML escapado contra XSS, confirmação humana em ações sensíveis e defesa contra injeção de instruções em páginas.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>A equipe de agentes</h2>
+  <div class="agents">
+    <span class="agent">🧭 Navegador</span>
+    <span class="agent">🔎 Pesquisador</span>
+    <span class="agent">📖 Leitor</span>
+    <span class="agent">📝 Preenchedor</span>
+    <span class="agent">💬 Social</span>
+    <span class="agent">🔐 Acesso</span>
+  </div>
+</section>
+
+<section id="instalar">
+  <h2>Como instalar</h2>
+  <ol class="steps">
+    <li><a href="mangaba-chrome-v1.8.2.zip" download>Baixe o ZIP</a> e descompacte numa pasta.</li>
+    <li>Abra <code>chrome://extensions</code> no Chrome (ou Edge).</li>
+    <li>Ative o <b>Modo do desenvolvedor</b> (canto superior direito).</li>
+    <li>Clique em <b>Carregar sem compactação</b> e selecione a pasta descompactada.</li>
+    <li>Clique no ícone da Mangaba para abrir o painel lateral.</li>
+    <li>No <b>⚙︎</b>, informe a URL do seu <b>Mangaba Gateway</b> (padrão <code>http://localhost:8080/v1/chat/completions</code>) e o modelo.</li>
+  </ol>
+  <div class="note">⚙️ A extensão precisa de um <b>Mangaba Gateway</b> (API compatível com OpenAI) para funcionar. Para o modo agente, prefira modelos maiores (ex.: <code>mangaba-pro</code> / <code>mangaba-max</code>) — os menores erram mais os passos.</div>
+</section>
+
+</div>
+
+<footer>
+  Mangaba AI · extensão Chrome · feita no Brasil 🇧🇷<br>
+  Código original, Manifest V3, sem rastreadores.
+</footer>
+</body>
+</html>

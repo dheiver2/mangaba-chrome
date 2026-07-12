@@ -1,5 +1,7 @@
 # Mangaba AI — Extensão Chrome 🥭
 
+📄 **Página / download:** https://dheiver2.github.io/mangaba-chrome/ (via GitHub Pages, pasta `docs/`)
+
 Assistente de IA no painel lateral do Chrome, conectado ao **Mangaba Gateway** (modelos GGUF locais). Código 100% original, Manifest V3, zero dependências.
 
 ## Funcionalidades
