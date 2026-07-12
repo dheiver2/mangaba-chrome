@@ -10,7 +10,8 @@ const DEFAULTS = {
   url: "http://localhost:8080/v1/chat/completions",
   model: "",
   key: "",
-  maxSteps: 20
+  maxSteps: 20,
+  dados: "" // dados pessoais do usuário (chave: valor por linha) — usados via {{chave}}, nunca vão ao modelo
 };
 let cfg = { ...DEFAULTS };
 
@@ -20,7 +21,22 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgModel").value = cfg.model;
   $("cfgKey").value = cfg.key;
   $("cfgSteps").value = cfg.maxSteps;
+  $("cfgDados").value = cfg.dados || "";
 });
+
+// mapa dos dados pessoais (chave->valor) e substituição de {{chave}} feita SÓ na execução (fora do modelo)
+function dadosMap() {
+  const m = {};
+  (cfg.dados || "").split("\n").forEach((l) => {
+    const i = l.indexOf(":");
+    if (i > 0) { const k = l.slice(0, i).trim().toLowerCase(); const v = l.slice(i + 1).trim(); if (k && v) m[k] = v; }
+  });
+  return m;
+}
+function subDados(texto) {
+  const m = dadosMap();
+  return String(texto).replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_, k) => m[k.toLowerCase()] ?? `{{${k}}}`);
+}
 
 // pré-carga assíncrona do modelo no gateway (HD USB 2.0 → RAM) para matar o cold-start
 function warmup() {
@@ -36,7 +52,8 @@ $("btnSave").onclick = () => {
     url: $("cfgUrl").value.trim() || DEFAULTS.url,
     model: $("cfgModel").value.trim(),
     key: $("cfgKey").value.trim(),
-    maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20))
+    maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20)),
+    dados: $("cfgDados").value.trim()
   };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
@@ -517,7 +534,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [];
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false;
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false, resumoMemoria = "";
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -649,7 +666,11 @@ async function runAgent(task) {
       }
 
       box.add(`${passo}. ${describeAction(act, label)}`);
-      const res = await tool(act.tool, act.args || {});
+      // substitui {{chave}} pelos dados reais SÓ na execução — o modelo nunca vê o valor
+      let execArgs = act.args || {};
+      if (act.tool === "digitar" && execArgs.texto) execArgs = { ...execArgs, texto: subDados(execArgs.texto) };
+      else if (act.tool === "preencher" && Array.isArray(execArgs.campos)) execArgs = { ...execArgs, campos: execArgs.campos.map((c) => ({ ...c, texto: subDados(c.texto) })) };
+      const res = await tool(act.tool, execArgs);
       const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
       if (act.tool === "ler" && res?.ok) {
         leitura = String(res.out).slice(0, 3500);
@@ -681,6 +702,18 @@ async function runAgent(task) {
       }
       statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
 
+      // memória procedural: quando o histórico cresce, resume o antigo em 2-3 linhas e mantém só o recente
+      if (feitas.length >= 16) {
+        try {
+          const antigas = feitas.slice(0, feitas.length - 8);
+          const resumo = await llm([
+            { role: "system", content: "Resuma em 2-3 linhas curtas e factuais o que o agente JÁ fez até aqui (memória de longo prazo). Sem inventar." },
+            { role: "user", content: (resumoMemoria ? `Resumo anterior:\n${resumoMemoria}\n\n` : "") + `Ações a resumir:\n${antigas.join("\n")}` }
+          ], 200);
+          if (resumo.trim()) { resumoMemoria = resumo.trim().slice(0, 800); feitas.splice(0, feitas.length - 8); box.add("🧠 Memória: histórico antigo resumido"); }
+        } catch { /* opcional */ }
+      }
+
       const snapRes = await tool("snapshot", {});
       const snap = snapRes?.ok ? snapRes.out : null;
       if (snap?.url && visited[visited.length - 1] !== snap.url) { visited.push(snap.url); prevKeys = new Set(); }
@@ -694,10 +727,12 @@ async function runAgent(task) {
         { role: "user", content:
           `Tarefa do usuário: ${task}\n` +
           (plano.length ? `\nPlano combinado: ${plano.join("; ")}\n` : "") +
+          (Object.keys(dadosMap()).length ? `\nDADOS DO USUÁRIO (para preencher, use o marcador {{chave}} — o valor real é inserido na hora e você NUNCA o vê): ${Object.keys(dadosMap()).map((k) => "{{" + k + "}}").join(", ")}\n` : "") +
           (meta >= 2 ? `\nMETA: ${meta} itens no total. Trabalhe UM item por vez; só use "concluir" quando os ${meta} estiverem realmente feitos. Vá contando quantos já completou.\n` : "") +
           (anteriores ? `\nTarefas anteriores nesta conversa:\n${anteriores}\n` : "") +
           // só as últimas 10 ações (o histórico não pode crescer sem limite: infla o prompt e trava o modelo)
-          `\nAções já executadas${feitas.length > 10 ? ` (últimas 10 de ${feitas.length})` : ""}:\n${feitas.length ? feitas.slice(-10).map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n` +
+          (resumoMemoria ? `\nResumo do que já foi feito antes:\n${resumoMemoria}\n` : "") +
+          `\nAções já executadas${feitas.length > 10 ? ` (últimas 10)` : ""}:\n${feitas.length ? feitas.slice(-10).map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n` +
           (leitura ? `\nConteúdo lido da página (ação "ler"):\n${leitura}\n` : "") +
           (visao ? `\nO que você viu na captura de tela (ação "olhar"):\n${visao}\n` : "") +
           (form ? `\nMapa do formulário (ação "formulario"):\n${form}\n` : "") +
