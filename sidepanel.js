@@ -96,9 +96,22 @@ function agentSystem(agent) {
 
 function parseAction(raw) {
   const clean = raw.replace(/<think>[\s\S]*?<\/think>/g, "");
-  const a = clean.indexOf("{"), b = clean.lastIndexOf("}");
-  if (a < 0 || b <= a) return null;
-  try { return JSON.parse(clean.slice(a, b + 1)); } catch { return null; }
+  const a = clean.indexOf("{");
+  if (a < 0) return null;
+  // extrai o primeiro objeto JSON balanceado (tolera lixo antes/depois, ex.: "}" extra)
+  let depth = 0, str = false, esc = false;
+  for (let i = a; i < clean.length; i++) {
+    const c = clean[i];
+    if (esc) { esc = false; continue; }
+    if (c === "\\") { esc = true; continue; }
+    if (c === '"') str = !str;
+    if (str) continue;
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) {
+      try { return JSON.parse(clean.slice(a, i + 1)); } catch { return null; }
+    }
+  }
+  return null;
 }
 
 const tool = (t, args) => chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args });
@@ -124,15 +137,20 @@ async function runAgent(task) {
   addMsg("step", `${agent.nome} assumiu a tarefa`);
 
   const feitas = [];
+  let leitura = ""; // conteúdo completo da última ação "ler"
   for (let passo = 1; passo <= 15; passo++) {
     const snapRes = await tool("snapshot", {});
     const contexto = snapRes?.ok ? fmtSnapshot(snapRes.out) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
     const raw = await llm([
       { role: "system", content: agentSystem(agent) },
-      { role: "user", content: `Tarefa do usuário: ${task}\n\n${contexto}\n\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n\nQual a próxima ação? Responda somente o JSON.` }
+      { role: "user", content: `Tarefa do usuário: ${task}\n\n${contexto}\n${leitura ? `\nConteúdo lido da página (ação "ler"):\n${leitura}\n` : ""}\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n\nQual a próxima ação? Responda somente o JSON.` }
     ]);
     const act = parseAction(raw);
-    if (!act?.tool) { addMsg("err", "Resposta inválida do modelo: " + raw.slice(0, 120)); return; }
+    if (!act?.tool) {
+      feitas.push(`resposta inválida ("${raw.slice(0, 60)}...") → envie UM único objeto JSON válido`);
+      addMsg("step", `${passo}. resposta inválida, tentando de novo`);
+      continue;
+    }
     if (act.tool === "concluir") {
       addMsg("assistant", act.args?.resposta || "Tarefa concluída.");
       return;
@@ -140,7 +158,12 @@ async function runAgent(task) {
     addMsg("step", `${passo}. ${act.tool} ${JSON.stringify(act.args || {})}`);
     const res = await tool(act.tool, act.args || {});
     const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
-    feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
+    if (act.tool === "ler" && res?.ok) {
+      leitura = String(res.out).slice(0, 5000);
+      feitas.push(`ler → conteúdo obtido (veja acima); se já basta para a tarefa, use "concluir"`);
+    } else {
+      feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
+    }
     await sleep(400);
   }
   addMsg("err", "Limite de 15 passos atingido sem concluir. Refine o pedido.");
