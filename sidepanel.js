@@ -250,9 +250,21 @@ function parseAction(raw) {
     if (str) continue;
     if (c === "{") depth++;
     else if (c === "}" && --depth === 0) {
-      try { return JSON.parse(clean.slice(a, i + 1)); } catch { return null; }
+      const block = clean.slice(a, i + 1);
+      try { return JSON.parse(block); } catch { return repairJson(block); }
     }
   }
+  return null;
+}
+
+// modelos pequenos erram a sintaxe: {"listar_abas","args":{}} (vírgula no lugar de :), {"clicar"} etc.
+function repairJson(s) {
+  const tentativas = [
+    s.replace(/^\s*\{\s*"([a-z_]+)"\s*,/i, '{"tool":"$1",'),            // {"x","args":...}
+    s.replace(/^\s*\{\s*"([a-z_]+)"\s*\}\s*$/i, '{"tool":"$1","args":{}}'), // {"x"}
+    s.replace(/^(\s*\{\s*"[^"]+")\s*,/, "$1:")                          // 1ª vírgula → dois-pontos
+  ];
+  for (const t of tentativas) { try { return JSON.parse(t); } catch { /* próxima */ } }
   return null;
 }
 
@@ -449,7 +461,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [];
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set();
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0;
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -598,10 +610,18 @@ async function runAgent(task) {
         const m = clean.match(/"resposta"\s*:\s*"([\s\S]+)/);
         if (m) { finish(m[1].replace(/\\n/g, "\n").replace(/["}\]]*\s*$/, "")); return; }
         if (!clean.includes("{") && leitura && clean.length > 40) { finish(clean); return; }
-        feitas.push(`resposta inválida ("${clean.slice(0, 60)}...") → envie UM objeto JSON começando com {`);
-        box.add(`⚠️ Resposta fora do formato, pedindo de novo`);
+        invalidos++;
+        feitas.push(`resposta inválida ("${clean.slice(0, 80)}") → responda EXATAMENTE {"tool":"nome","args":{...}}`);
+        box.add(`⚠️ Formato inválido: ${clean.slice(0, 70) || "(vazio)"}`);
+        if (invalidos >= 4) {
+          statusTxt = null;
+          status.textContent = `❌ Modelo não retornou ações válidas · ${secs()}s`;
+          addMsg("err", `O modelo respondeu fora do formato JSON ${invalidos}× seguidas (última: "${clean.slice(0, 120) || "vazia"}"). Tente um modelo maior no ⚙︎ (ex.: mangaba-pro ou mangaba-max) — os menores erram a sintaxe do JSON.`);
+          return;
+        }
         continue;
       }
+      invalidos = 0;
 
       // detecção de loop: mesmo lote 3x seguidas
       const sig = JSON.stringify(acts);
