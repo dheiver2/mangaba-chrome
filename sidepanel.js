@@ -202,7 +202,14 @@ FLUXO DE LOGIN (regra absoluta de segurança):
 3. Você NUNCA digita senha, código 2FA, PIN ou resolve CAPTCHA — esses campos são bloqueados. Ao chegar nesse ponto, use "perguntar" avisando: "Abri o login de X e preenchi o usuário. Por favor, digite sua senha e conclua o acesso; me avise quando terminar."
 4. Depois que o usuário confirmar que entrou, verifique com "ler"/"olhar" se o login teve sucesso e então prossiga com a tarefa seguinte (ou conclua).`;
 
-const FLUXOS = { pesquisador: PESQUISADOR_FLUXO, social: SOCIAL_FLUXO, acesso: LOGIN_FLUXO };
+const LEITOR_FLUXO = `
+
+FLUXO DE LEITURA (siga à risca):
+1. Use "ler" IMEDIATAMENTE — ela captura TODO o texto da página de uma vez. Você NÃO precisa rolar para ler; rolar NÃO ajuda a ler.
+2. Se a página for muito longa, use "ler" com "offset" para pegar a continuação.
+3. Assim que tiver o conteúdo, use "concluir" com a resposta/resumo em Markdown. Não fique rolando.`;
+
+const FLUXOS = { pesquisador: PESQUISADOR_FLUXO, social: SOCIAL_FLUXO, acesso: LOGIN_FLUXO, leitor: LEITOR_FLUXO };
 
 const PREENCHEDOR_FLUXO = `
 
@@ -227,7 +234,7 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"marcar","args":{"i":N,"valor":true}} — marcar (true) ou desmarcar (false) checkbox/radio
 {"tool":"curtir","args":{"i":N}} — curtir/dar like no botão de like/coração [N] (redes sociais)
 {"tool":"rolar","args":{"dir":"baixo"}} — rolar a página ("baixo" ou "cima")
-{"tool":"ler","args":{"offset":0}} — obter o texto da página (use offset para continuar páginas longas)
+{"tool":"ler","args":{"offset":0}} — obter TODO o texto da página de uma vez (NÃO precisa rolar antes; use offset só para continuar páginas muito longas)
 {"tool":"esperar","args":{"segundos":2}} — aguardar a página carregar (1 a 10s)
 {"tool":"olhar","args":{}} — tirar uma captura de tela e descrevê-la com o modelo de visão (use quando o texto/elementos não bastarem, ex.: página visual ou vazia)
 {"tool":"listar_abas","args":{}} — listar as abas abertas da janela
@@ -475,7 +482,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [];
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0;
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0;
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -570,6 +577,7 @@ async function runAgent(task) {
       const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
       if (act.tool === "ler" && res?.ok) {
         leitura = String(res.out).slice(0, 5000);
+        leuAlguma = true;
         feitas.push(`ler → conteúdo obtido (veja acima); se já basta para a tarefa, use "concluir"`);
       } else if (act.tool === "formulario" && res?.ok) {
         form = String(res.out).slice(0, 3500);
@@ -642,15 +650,35 @@ async function runAgent(task) {
       lastCount = sig === lastSig ? lastCount + 1 : 1;
       lastSig = sig;
       if (lastCount >= 3) {
-        feitas.push("ATENÇÃO: você repetiu a mesma ação 3 vezes sem progresso; mude de estratégia ou use \"concluir\"");
-        box.add("♻️ Ação repetida 3× — pedindo mudança de estratégia");
+        avisosLoop++;
+        if (avisosLoop >= 2) {
+          statusTxt = null;
+          status.textContent = `⚠️ Preso em repetição · ${box.n} passos · ${secs()}s`;
+          addMsg("err", "O agente ficou repetindo a mesma ação sem progredir. Tente um modelo maior no ⚙︎ (mangaba-pro/max) ou reformule o pedido.");
+          return;
+        }
+        feitas.push("ATENÇÃO: você repetiu a mesma ação sem progresso; MUDE de estratégia AGORA ou use \"concluir\".");
+        box.add("♻️ Ação repetida — pedindo mudança de estratégia");
         lastCount = 0;
         continue;
       }
 
       if (acts.length > 1) box.add(`⚡ Lote de ${acts.length} ações`);
       // executa o lote; para no 1º sinal de re-observação (navegação/erro/pausa) — evita índices obsoletos
-      for (const act of acts) {
+      for (let act of acts) {
+        // anti-loop de rolagem: rolar não ajuda a "ler" — força a leitura da página inteira
+        if (act.tool === "rolar") {
+          rolares++;
+          const limite = agent.id === "leitor" ? 1 : 3;
+          if (!leuAlguma && rolares >= limite) {
+            box.add("📖 Rolar não é preciso para ler — lendo a página inteira");
+            act = { tool: "ler", args: {} };
+          } else if (rolares > 6) {
+            feitas.push("Você rolou vezes demais sem concluir. PARE de rolar: use \"ler\" e depois \"concluir\".");
+            box.add("♻️ Rolagem em excesso — pare e conclua");
+            break;
+          }
+        }
         const r = await handleAct(act, snap, passo);
         if (r === "FINISH") return;
         if (r === "BREAK") break;
