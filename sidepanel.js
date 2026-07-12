@@ -554,7 +554,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [];
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false, resumoMemoria = "";
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false, resumoMemoria = "", sigAnterior = "", esperavaMudanca = false;
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -705,6 +705,7 @@ async function runAgent(task) {
         feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
       }
       await sleep(250);
+      if (res?.ok && NAVEGA.includes(act.tool)) esperavaMudanca = true; // verificar no próximo passo se mudou
       if (!res?.ok) return "BREAK";            // erro → re-observar
       return NAVEGA.includes(act.tool) ? "BREAK" : "NEXT"; // navegação encerra o lote
     }
@@ -742,6 +743,14 @@ async function runAgent(task) {
       if (snap?.url && visited[visited.length - 1] !== snap.url) { visited.push(snap.url); prevKeys = new Set(); }
       const contexto = snap ? fmtSnapshot(snap, prevKeys) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
       if (snap) prevKeys = new Set(snap.elements.map(elKey));
+      // AUTO-RECUPERAÇÃO: se a última ação de navegação não mudou nada, avisa o modelo p/ tentar outro caminho
+      const pageSig = snap ? snap.url + "|" + snap.elements.length : "";
+      if (esperavaMudanca && pageSig && pageSig === sigAnterior) {
+        feitas.push("⚠️ a última ação NÃO mudou a página (mesmo URL e elementos) — o alvo pode estar errado ou não ser clicável; escolha OUTRO elemento, role até ele ('rolar_ate') ou use 'esperar' se estiver carregando.");
+        box.add("🔧 Ação sem efeito — tentando outro caminho");
+      }
+      esperavaMudanca = false;
+      sigAnterior = pageSig;
       const anteriores = agentHistory.slice(-3).map((h) => `- "${h.task}" → ${h.resposta.slice(0, 100)}`).join("\n");
 
       // ordem pensada p/ KV-cache: partes estáveis/append-only primeiro, snapshot dinâmico por último
