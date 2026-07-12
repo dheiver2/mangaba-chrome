@@ -260,6 +260,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         else if (tool === "preencher") out = await exec(tab.id, preencherFn, [args.campos || []]);
         else if (tool === "selecionar") out = await exec(tab.id, selecionarFn, [args.i, String(args.opcao ?? "")]);
         else if (tool === "marcar") out = await exec(tab.id, marcarFn, [args.i, args.valor]);
+        else if (tool === "curtir") { out = await exec(tab.id, clickFn, [args.i]); await sleep(600); }
         else if (tool === "clicar") {
           out = await exec(tab.id, clickFn, [args.i]);
           await sleep(800); await waitLoad(tab.id, 6000);

@@ -167,12 +167,18 @@ FLUXO DE PESQUISA:
 
 const SOCIAL_FLUXO = `
 
-FLUXO DE MENSAGENS/INBOX (redes sociais):
-1. Navegue até a caixa de entrada/conversa (ex.: web.whatsapp.com, instagram.com/direct, linkedin.com/messaging).
-2. Use "ler" (e "olhar" se for muito visual) para entender as mensagens recebidas.
-3. REDIJA a resposta e escreva no campo de mensagem com "digitar"/"preencher" — mas NÃO ENVIE por conta própria.
-4. Para enviar, use "clicar" no botão Enviar (ou "tecla" Enter): isso é uma ação sensível e o USUÁRIO vai CONFIRMAR antes de publicar.
-5. Nunca envie mensagens em massa, spam, nem responda em nome do usuário assumindo opiniões — em caso de dúvida sobre o teor, use "perguntar".`;
+FLUXO DE REDES SOCIAIS (inbox, comentários e curtidas):
+1. Navegue até a plataforma/conversa/perfil (ex.: web.whatsapp.com, instagram.com, x.com, linkedin.com/feed).
+2. Use "ler" (e "olhar" se for visual) para entender as mensagens ou publicações.
+3. CURTIR: use "curtir" no botão de like/coração da publicação — é reversível e não precisa de confirmação.
+4. COMENTAR/RESPONDER: escreva o texto no campo com "digitar"/"preencher" e depois envie com "clicar" no botão (Comentar/Publicar/Enviar) ou "tecla" Enter. O ENVIO é sensível: o USUÁRIO vai CONFIRMAR cada comentário/mensagem antes de publicar.
+5. Escreva comentários GENUÍNOS e específicos sobre o conteúdo de cada publicação — nunca o mesmo texto repetido, nada de spam nem mensagens em massa. Em dúvida sobre o teor, use "perguntar".
+
+TAREFA EM LISTA (ex.: "comente 1 publicação de 10 influenciadores de IA"):
+a. Se não houver a lista pronta, primeiro descubra os alvos (busque na plataforma ou peça ao usuário com "perguntar").
+b. Trabalhe UM alvo por vez: abrir perfil → ler uma publicação recente → escrever um comentário relevante → enviar (usuário confirma) → registrar como feito.
+c. Vá ao próximo alvo e repita, mantendo a contagem (ex.: "3/10 feitos"). No fim, use "concluir" com o resumo do que foi comentado/curtido.
+d. Se o limite de passos acabar antes de terminar, conclua relatando quantos foram feitos e quais faltaram.`;
 
 const LOGIN_FLUXO = `
 
@@ -205,6 +211,7 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"preencher","args":{"campos":[{"i":N,"texto":"..."},{"i":M,"texto":"..."}]}} — preencher vários campos de texto de uma vez
 {"tool":"selecionar","args":{"i":N,"opcao":"texto ou valor da opção"}} — escolher opção em dropdown (select)
 {"tool":"marcar","args":{"i":N,"valor":true}} — marcar (true) ou desmarcar (false) checkbox/radio
+{"tool":"curtir","args":{"i":N}} — curtir/dar like no botão de like/coração [N] (redes sociais)
 {"tool":"rolar","args":{"dir":"baixo"}} — rolar a página ("baixo" ou "cima")
 {"tool":"ler","args":{"offset":0}} — obter o texto da página (use offset para continuar páginas longas)
 {"tool":"esperar","args":{"segundos":2}} — aguardar a página carregar (1 a 10s)
@@ -249,7 +256,7 @@ function parseAction(raw) {
 
 const tool = (t, args) => chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args });
 
-const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "clicar", "digitar", "tecla", "rolar", "ler", "esperar", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "perguntar", "concluir"];
+const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "clicar", "digitar", "tecla", "rolar", "ler", "esperar", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "perguntar", "concluir"];
 const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir" };
 
 const VISION_MODEL = "mangaba-vision-q8";
@@ -416,6 +423,7 @@ function describeAction(act, label) {
     case "preencher": return `📝 Preenchendo ${(a.campos || []).length} campo(s)`;
     case "selecionar": return `▾ Selecionando "${a.opcao}" em [${a.i}] "${label}"`;
     case "marcar": return `☑️ ${a.valor === false ? "Desmarcando" : "Marcando"} [${a.i}] "${label}"`;
+    case "curtir": return `❤️ Curtindo [${a.i}] "${label}"`;
     default: return `${act.tool} ${JSON.stringify(a)}`;
   }
 }
@@ -436,7 +444,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [];
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0;
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "";
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -518,6 +526,9 @@ async function runAgent(task) {
         continue;
       }
 
+      if (act.tool === "digitar") ultimoTexto = String(act.args?.texto ?? "");
+      else if (act.tool === "preencher") ultimoTexto = (act.args?.campos || []).map((c) => c.texto).filter(Boolean).join(" | ");
+
       if (act.tool === "concluir") { finish(act.args?.resposta); return; }
 
       if (act.tool === "olhar") {
@@ -563,7 +574,9 @@ async function runAgent(task) {
       if (sensivel) {
         statusTxt = null;
         status.textContent = "⏸️ Aguardando sua confirmação...";
-        const descConf = socialEnvio ? "enviar/publicar a mensagem" : `${act.tool} em "${label}"`;
+        const descConf = socialEnvio
+          ? (ultimoTexto ? `publicar o comentário/mensagem: "${ultimoTexto.slice(0, 140)}"` : "enviar/publicar a mensagem")
+          : `${act.tool} em "${label}"`;
         const okd = await confirmAction(descConf);
         statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
         if (!okd) {
