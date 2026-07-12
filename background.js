@@ -16,15 +16,30 @@ function exec(tabId, func, args = []) {
 }
 
 // ---- funções injetadas na página ----
+// Os elementos ficam em window.__mgbEls (referências vivas): funciona com
+// Shadow DOM e iframes same-origin, onde seletores por atributo falhariam.
 const snapshotFn = () => {
   const vis = (el) => {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   };
-  const els = [...document.querySelectorAll(
-    'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]'
-  )].filter(vis).slice(0, 80);
-  els.forEach((el, i) => el.setAttribute("data-mgb", i));
+  const SEL = 'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
+  const els = [];
+  let varridos = 0;
+  const walk = (root) => {
+    if (!root || els.length >= 90 || varridos > 4000) return;
+    for (const el of root.querySelectorAll(SEL)) {
+      if (els.length >= 90) break;
+      if (vis(el)) els.push(el);
+    }
+    for (const el of root.querySelectorAll("*")) {
+      if (els.length >= 90 || ++varridos > 4000) break;
+      if (el.shadowRoot) walk(el.shadowRoot);
+      else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
+    }
+  };
+  walk(document);
+  window.__mgbEls = els;
   const alt = Math.max(1, document.documentElement.scrollHeight);
   return {
     url: location.href,
@@ -42,17 +57,32 @@ const snapshotFn = () => {
     trecho: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 1200)
   };
 };
+const flashFn = (el) => {
+  const o = el.style.outline;
+  el.style.outline = "3px solid #F0781E";
+  setTimeout(() => (el.style.outline = o), 700);
+};
 const clickFn = (i) => {
-  const el = document.querySelector(`[data-mgb="${i}"]`);
-  if (!el) return "elemento [" + i + "] não encontrado";
+  const el = (window.__mgbEls || [])[i];
+  if (!el) return "elemento [" + i + "] não encontrado (a página mudou? refaça o snapshot agindo de novo)";
   el.scrollIntoView({ block: "center" });
+  const o = el.style.outline;
+  el.style.outline = "3px solid #F0781E";
+  setTimeout(() => (el.style.outline = o), 700);
+  const r = el.getBoundingClientRect();
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+  for (const [Ctor, type] of [[PointerEvent, "pointerdown"], [MouseEvent, "mousedown"], [PointerEvent, "pointerup"], [MouseEvent, "mouseup"]])
+    el.dispatchEvent(new Ctor(type, opts));
   el.click();
   return "cliquei em [" + i + "]";
 };
 const typeFn = (i, texto) => {
-  const el = document.querySelector(`[data-mgb="${i}"]`);
+  const el = (window.__mgbEls || [])[i];
   if (!el) return "elemento [" + i + "] não encontrado";
   if (el.type === "password") return "recusado: campo de senha — peça que o usuário digite manualmente";
+  const o = el.style.outline;
+  el.style.outline = "3px solid #F0781E";
+  setTimeout(() => (el.style.outline = o), 700);
   el.focus();
   if (el.isContentEditable) el.textContent = texto;
   else {
@@ -65,7 +95,7 @@ const typeFn = (i, texto) => {
   return "digitei em [" + i + "]";
 };
 const keyFn = (i, key) => {
-  const el = document.querySelector(`[data-mgb="${i}"]`) || document.activeElement;
+  const el = (window.__mgbEls || [])[i] || document.activeElement;
   for (const type of ["keydown", "keypress", "keyup"])
     el.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
   if (key === "Enter") el.closest("form")?.requestSubmit?.();
@@ -118,6 +148,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const nt = await chrome.tabs.create({ url: args.url, active: true });
         await sleep(500); await waitLoad(nt.id);
         out = "abri nova aba em " + args.url;
+      } else if (tool === "listar_abas") {
+        const tabs = await chrome.tabs.query({ currentWindow: true });
+        out = tabs.map((t) => `[${t.id}]${t.active ? "*" : ""} ${(t.title || "").slice(0, 50)} — ${(t.url || "").slice(0, 60)}`).join("\n");
+      } else if (tool === "trocar_aba") {
+        await chrome.tabs.update(+args.id, { active: true });
+        await sleep(400);
+        out = "fui para a aba [" + args.id + "]";
+      } else if (tool === "olhar") {
+        const tab = await getTab();
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 });
+        out = { dataUrl };
       } else {
         const tab = await getTab();
         if (tool === "snapshot") out = await exec(tab.id, snapshotFn);
