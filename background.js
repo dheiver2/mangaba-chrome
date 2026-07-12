@@ -24,21 +24,26 @@ const snapshotFn = () => {
     return r.width > 0 && r.height > 0;
   };
   const SEL = 'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
-  const els = [];
+  const cands = [];
   let varridos = 0;
   const walk = (root) => {
-    if (!root || els.length >= 45 || varridos > 4000) return;
+    if (!root || cands.length >= 160 || varridos > 5000) return;
     for (const el of root.querySelectorAll(SEL)) {
-      if (els.length >= 45) break;
-      if (vis(el)) els.push(el);
+      if (cands.length >= 160) break;
+      if (vis(el)) cands.push(el);
     }
     for (const el of root.querySelectorAll("*")) {
-      if (els.length >= 45 || ++varridos > 4000) break;
+      if (cands.length >= 160 || ++varridos > 5000) break;
       if (el.shadowRoot) walk(el.shadowRoot);
       else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
     }
   };
   walk(document);
+  // PRIORIZA o que está na viewport: após rolar até os comentários, o campo entra na lista dos 45
+  const emTela = (el) => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+  const els = [];
+  for (const el of cands) if (els.length < 45 && emTela(el)) els.push(el);
+  for (const el of cands) if (els.length < 45 && !emTela(el)) els.push(el);
   window.__mgbEls = els;
   const alt = Math.max(1, document.documentElement.scrollHeight);
   return {
@@ -69,21 +74,25 @@ const formFn = () => {
     return r.width > 0 && r.height > 0;
   };
   const SEL = 'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
-  const els = [];
+  const cands = [];
   let varridos = 0;
   const walk = (root) => {
-    if (!root || els.length >= 45 || varridos > 4000) return;
+    if (!root || cands.length >= 160 || varridos > 5000) return;
     for (const el of root.querySelectorAll(SEL)) {
-      if (els.length >= 45) break;
-      if (vis(el)) els.push(el);
+      if (cands.length >= 160) break;
+      if (vis(el)) cands.push(el);
     }
     for (const el of root.querySelectorAll("*")) {
-      if (els.length >= 45 || ++varridos > 4000) break;
+      if (cands.length >= 160 || ++varridos > 5000) break;
       if (el.shadowRoot) walk(el.shadowRoot);
       else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
     }
   };
   walk(document);
+  const emTela = (el) => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+  const els = [];
+  for (const el of cands) if (els.length < 45 && emTela(el)) els.push(el);
+  for (const el of cands) if (els.length < 45 && !emTela(el)) els.push(el);
   window.__mgbEls = els;
   const rotulo = (el) => {
     if (el.id) { const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`); if (l) return l.innerText; }

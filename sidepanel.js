@@ -243,6 +243,7 @@ VOCÊ FAZ TUDO — adapte-se ao que a tarefa pede:
 - PESQUISAR: vá a https://duckduckgo.com/html/?q=SUA+BUSCA, use "ler" e cruze as fontes; cite-as ao concluir.
 - FORMULÁRIOS: use "formulario" p/ mapear; NUNCA invente dados pessoais (use {{email}}, {{nome}}... se disponíveis, senão "perguntar"); confira antes de enviar.
 - REDES SOCIAIS: para comentar/responder, redija um texto GENUÍNO e específico daquela publicação, escreva com "digitar" e envie — o envio é confirmado pelo usuário. Para curtir use "curtir". Nunca spam nem texto repetido.
+- COMENTAR EM VÍDEO (YouTube/Instagram): 1) use "rolar_ate" com "comentários" (ou "Comments") p/ chegar na seção; 2) no snapshot, ache e CLIQUE no campo "Adicionar um comentário" (ele só ativa após o clique); 3) "digitar" o comentário no campo ativado; 4) clique em "Comentar"/"Publicar". NÃO fique rolando: depois de rolar até os comentários, o campo aparece nos elementos — clique nele.
 - LOGIN: preencha o usuário se souber, mas NUNCA digite senha/2FA/CAPTCHA — use "perguntar" pedindo que o usuário conclua o acesso.
 - VÁRIOS ITENS (ex.: "5 vídeos"): faça UM por vez, conte o progresso e só use "concluir" quando TODOS estiverem feitos.
 - Se faltar informação essencial ou a tarefa for ambígua, use "perguntar" ANTES de agir.`;
