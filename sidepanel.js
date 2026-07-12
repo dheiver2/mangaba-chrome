@@ -695,9 +695,18 @@ async function runAgent(task) {
       const res = await tool(act.tool, execArgs);
       const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
       if (act.tool === "ler" && res?.ok) {
-        leitura = String(res.out).slice(0, 3500);
+        // auto-continua páginas longas para o resumo ficar COMPLETO (busca até +2 blocos)
+        const marcador = /\n\[\.\.\.a página tem[\s\S]*$/;
+        let txt = String(res.out), off = 6000, cont = 0;
+        while (marcador.test(txt) && cont < 2) {
+          const mais = await tool("ler", { offset: off });
+          if (!mais?.ok) break;
+          txt = txt.replace(marcador, "") + String(mais.out);
+          off += 6000; cont++;
+        }
+        leitura = txt.replace(marcador, "").slice(0, 8000);
         leuAlguma = true;
-        feitas.push(`ler → conteúdo obtido (veja acima); se já basta para a tarefa, use "concluir"`);
+        feitas.push(`ler → conteúdo obtido${cont ? ` (${cont + 1} blocos, página longa)` : ""} (veja acima); se já basta, use "concluir"`);
       } else if (act.tool === "formulario" && res?.ok) {
         form = String(res.out).slice(0, 1800);
         feitas.push(`formulario → mapa obtido (veja "Mapa do formulário"); preencha o que faltar ou pergunte os dados ao usuário`);
@@ -738,8 +747,15 @@ async function runAgent(task) {
         } catch { /* opcional */ }
       }
 
-      const snapRes = await tool("snapshot", {});
-      const snap = snapRes?.ok ? snapRes.out : null;
+      let snapRes = await tool("snapshot", {});
+      let snap = snapRes?.ok ? snapRes.out : null;
+      // VERIFICAÇÃO PÓS-NAVEGAÇÃO: página quase vazia após navegar = ainda carregando → espera e re-observa 1x
+      if (esperavaMudanca && snap && snap.elements.length < 5) {
+        box.add("⏳ Página carregando — aguardando");
+        await tool("esperar", { segundos: 2 });
+        snapRes = await tool("snapshot", {});
+        snap = snapRes?.ok ? snapRes.out : snap;
+      }
       if (snap?.url && visited[visited.length - 1] !== snap.url) { visited.push(snap.url); prevKeys = new Set(); }
       const contexto = snap ? fmtSnapshot(snap, prevKeys) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
       if (snap) prevKeys = new Set(snap.elements.map(elKey));
