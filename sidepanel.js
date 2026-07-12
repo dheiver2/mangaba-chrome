@@ -12,7 +12,7 @@ const DEFAULTS = {
 };
 let cfg = { ...DEFAULTS };
 
-chrome.storage.sync.get(DEFAULTS, (saved) => {
+if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   cfg = saved;
   $("cfgUrl").value = cfg.url;
   $("cfgModel").value = cfg.model;
@@ -30,13 +30,66 @@ $("btnSave").onclick = () => {
   $("settings").classList.add("hidden");
 };
 
+// ---------- renderização Markdown (sem dependências, HTML sempre escapado) ----------
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function md(src) {
+  const blocks = [];
+  src = src.replace(/```(\w*)\n?([\s\S]*?)(```|$)/g, (_, lang, code) => {
+    blocks.push(`<pre><code>${esc(code.replace(/\n$/, ""))}</code></pre>`);
+    return `\x00${blocks.length - 1}\x00`;
+  });
+  let h = esc(src)
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(^|\s)\*([^*\n]+)\*(?=\s|[.,;:!?]|$)/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  let out = "", list = null;
+  const closeList = () => { if (list) { out += `</${list}>`; list = null; } };
+  for (const ln of h.split("\n")) {
+    let m;
+    if ((m = ln.match(/^(#{1,4})\s+(.*)/))) { closeList(); out += `<h4>${m[2]}</h4>`; }
+    else if ((m = ln.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { closeList(); out += "<ul>"; list = "ul"; } out += `<li>${m[1]}</li>`; }
+    else if ((m = ln.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== "ol") { closeList(); out += "<ol>"; list = "ol"; } out += `<li>${m[1]}</li>`; }
+    else if (!ln.trim()) closeList();
+    else { closeList(); out += `<p>${ln}</p>`; }
+  }
+  closeList();
+  return out.replace(/\x00(\d+)\x00/g, (_, i) => blocks[i]);
+}
+
+const TYPING = '<span class="dots"><span></span><span></span><span></span></span>';
+
 function addMsg(cls, text) {
   const div = document.createElement("div");
   div.className = "msg " + cls;
-  div.textContent = text;
-  chat.appendChild(div);
+  if (cls === "assistant") {
+    div.innerHTML = text === "…" || text === "" ? TYPING : md(text);
+    const row = document.createElement("div");
+    row.className = "arow";
+    const av = document.createElement("img");
+    av.className = "avatar"; av.src = "icons/mark.png"; av.alt = "";
+    const btn = document.createElement("button");
+    btn.className = "copybtn"; btn.title = "Copiar"; btn.textContent = "⧉";
+    btn.onclick = () => {
+      navigator.clipboard.writeText(div.dataset.raw || div.textContent);
+      btn.textContent = "✓"; setTimeout(() => (btn.textContent = "⧉"), 1200);
+    };
+    if (text && text !== "…") div.dataset.raw = text;
+    row.append(av, div, btn);
+    chat.appendChild(row);
+  } else {
+    div.textContent = text;
+    chat.appendChild(div);
+  }
   chat.scrollTop = chat.scrollHeight;
   return div;
+}
+
+function setAssistant(div, text) {
+  div.dataset.raw = text;
+  div.innerHTML = md(text);
+  chat.scrollTop = chat.scrollHeight;
 }
 
 function gatewayHeaders() {
@@ -247,7 +300,7 @@ async function send() {
       headers,
       body: JSON.stringify({ model: cfg.model, messages, stream: true })
     });
-    if (!resp.ok) { bubble.remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
+    if (!resp.ok) { (bubble.closest(".arow") || bubble).remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
 
     let answer = "";
     if (resp.headers.get("content-type")?.includes("event-stream")) {
@@ -265,14 +318,14 @@ async function send() {
           if (!data || data === "[DONE]") continue;
           try {
             const delta = JSON.parse(data).choices?.[0]?.delta?.content;
-            if (delta) { answer += delta; bubble.textContent = answer; chat.scrollTop = chat.scrollHeight; }
+            if (delta) { answer += delta; setAssistant(bubble, answer); }
           } catch { /* linha parcial */ }
         }
       }
     } else {
       const json = await resp.json();
       answer = json.choices?.[0]?.message?.content || JSON.stringify(json).slice(0, 500);
-      bubble.textContent = answer;
+      setAssistant(bubble, answer);
     }
     history.push({ role: "user", content: question }, { role: "assistant", content: answer });
   } catch (e) {
