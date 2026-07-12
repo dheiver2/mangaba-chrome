@@ -290,7 +290,17 @@ function repairJson(s) {
   return null;
 }
 
-const tool = (t, args) => chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args });
+// reenvia se o service worker MV3 tiver morrido (o próprio reenvio o reacorda)
+async function tool(t, args) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args });
+      if (r !== undefined) return r;
+    } catch { /* canal fechou: worker dormiu */ }
+    await sleep(300);
+  }
+  return { ok: false, error: "service worker não respondeu (recarregue a extensão em chrome://extensions)" };
+}
 
 const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "clicar", "digitar", "tecla", "rolar", "ler", "esperar", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "perguntar", "concluir"];
 const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir" };
@@ -612,6 +622,12 @@ async function runAgent(task) {
       if (agentRun.cancel) {
         statusTxt = null;
         status.textContent = `⏹ Interrompido por você · ${box.n} passos · ${secs()}s`;
+        return;
+      }
+      if (secs() > 240) { // teto de tempo: nunca rodar por minutos a fio
+        statusTxt = null;
+        status.textContent = `⏱️ Tempo limite (4 min) · ${box.n} passos`;
+        addMsg("err", "Tarefa interrompida por tempo (4 min). Divida em pedidos menores ou use um modelo mais rápido.");
         return;
       }
       statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
