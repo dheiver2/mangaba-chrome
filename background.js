@@ -203,6 +203,31 @@ const scrollFn = (dir) => {
   window.scrollBy({ top: dir === "cima" ? -600 : 600, behavior: "instant" });
   return "rolei para " + dir;
 };
+// rola até o elemento mais específico que contém um texto (ex.: "comentários"),
+// preferindo uma ocorrência que ainda NÃO está visível na tela.
+const scrollToTextFn = (texto) => {
+  const alvo = String(texto).toLowerCase().trim();
+  if (!alvo) return "texto vazio";
+  const especifico = (el) => {
+    let cur = el;
+    outer: while (true) {
+      for (const ch of cur.children) {
+        if ((ch.innerText || "").toLowerCase().includes(alvo)) { cur = ch; continue outer; }
+      }
+      break;
+    }
+    return cur;
+  };
+  const achados = [];
+  for (const el of document.querySelectorAll("body *")) {
+    const t = (el.innerText || el.getAttribute("aria-label") || "").toLowerCase();
+    if (t.includes(alvo)) { achados.push(especifico(el)); if (achados.length > 40) break; }
+  }
+  if (!achados.length) return `texto "${texto}" não encontrado na página`;
+  const foraDaTela = achados.find((el) => { const r = el.getBoundingClientRect(); return r.top < 0 || r.bottom > innerHeight; });
+  (foraDaTela || achados[0]).scrollIntoView({ block: "center", behavior: "instant" });
+  return `rolei até "${texto}"`;
+};
 const readFn = (offset) => {
   const t = document.body?.innerText || "";
   const o = Math.max(0, offset | 0);
@@ -292,6 +317,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           await sleep(500); await waitLoad(tab.id, 6000);
           out = out || "voltei para a página anterior";
         } else if (tool === "rolar") out = await exec(tab.id, scrollFn, [args.dir || "baixo"]);
+        else if (tool === "rolar_ate") { out = await exec(tab.id, scrollToTextFn, [String(args.texto ?? "")]); await sleep(400); }
         else if (tool === "ler") out = await exec(tab.id, readFn, [args.offset | 0]);
         else out = "ferramenta desconhecida: " + tool;
       }

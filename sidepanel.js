@@ -235,6 +235,8 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"marcar","args":{"i":N,"valor":true}} — marcar (true) ou desmarcar (false) checkbox/radio
 {"tool":"curtir","args":{"i":N}} — curtir/dar like no botão de like/coração [N] (redes sociais)
 {"tool":"rolar","args":{"dir":"baixo"}} — rolar a página ("baixo" ou "cima")
+{"tool":"rolar_ate","args":{"texto":"comentários"}} — rolar até o trecho que contém esse texto (útil p/ chegar em seções fora da tela)
+{"tool":"extrair","args":{"o_que":"títulos e canais dos 5 primeiros vídeos"}} — extrair dados específicos do texto da página, de forma estruturada
 {"tool":"ler","args":{"offset":0}} — obter TODO o texto da página de uma vez (NÃO precisa rolar antes; use offset só para continuar páginas muito longas)
 {"tool":"esperar","args":{"segundos":2}} — aguardar a página carregar (1 a 10s)
 {"tool":"olhar","args":{}} — tirar uma captura de tela e descrevê-la com o modelo de visão (use quando o texto/elementos não bastarem, ex.: página visual ou vazia)
@@ -322,8 +324,8 @@ async function tool(t, args) {
   return { ok: false, error: "service worker não respondeu (recarregue a extensão em chrome://extensions)" };
 }
 
-const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "clicar", "digitar", "tecla", "rolar", "ler", "esperar", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "perguntar", "concluir"];
-const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir" };
+const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "clicar", "digitar", "tecla", "rolar", "rolar_ate", "ler", "extrair", "esperar", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "perguntar", "concluir"];
+const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir", rolar_ate: "texto", extrair: "o_que" };
 
 const VISION_MODEL = "mangaba-vision-q8";
 
@@ -483,6 +485,8 @@ function describeAction(act, label) {
     case "digitar": return `⌨️ Digitando "${String(a.texto || "").slice(0, 40)}" em [${a.i}] "${label}"`;
     case "tecla": return `⏎ ${a.tecla || "Enter"} em [${a.i}] "${label}"`;
     case "rolar": return `↕️ Rolando para ${a.dir || "baixo"}`;
+    case "rolar_ate": return `🔎 Rolando até "${a.texto}"`;
+    case "extrair": return `📑 Extraindo: ${a.o_que || "dados"}`;
     case "ler": return `📖 Lendo a página${a.offset ? ` (a partir de ${a.offset})` : ""}`;
     case "esperar": return `⏱️ Esperando ${a.segundos || 1}s`;
     case "olhar": return "👁️ Olhando a página (captura + visão)";
@@ -582,6 +586,29 @@ async function runAgent(task) {
           }
         } else {
           feitas.push("olhar → ERRO: " + (res?.error || "captura falhou"));
+        }
+        statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
+        return "BREAK";
+      }
+
+      if (act.tool === "extrair") {
+        const oq = act.args?.o_que || "as informações principais";
+        box.add(`${passo}. 📑 Extraindo: ${oq}`);
+        statusTxt = "📑 Extraindo dados da página";
+        const res = await tool("ler", {});
+        if (res?.ok) {
+          try {
+            const dados = await llm([
+              { role: "system", content: "Extraia do texto da página EXATAMENTE o que for pedido, de forma concisa e organizada (Markdown/lista). Se a informação não estiver no texto, diga claramente que não encontrou. Não invente dados." },
+              { role: "user", content: `Extrair: ${oq}\n\nTexto da página:\n${String(res.out).slice(0, 4000)}` }
+            ], 600);
+            leitura = `Extração ("${oq}"):\n${dados}`;
+            feitas.push(`extrair "${oq}" → dados obtidos (veja "Conteúdo lido"); use "concluir" se já basta`);
+          } catch (e) {
+            feitas.push("extrair → ERRO: " + e.message);
+          }
+        } else {
+          feitas.push("extrair → ERRO ao ler a página: " + (res?.error || "?"));
         }
         statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
         return "BREAK";
