@@ -22,6 +22,14 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgSteps").value = cfg.maxSteps;
 });
 
+// pré-carga assíncrona do modelo no gateway (HD USB 2.0 → RAM) para matar o cold-start
+function warmup() {
+  if (!cfg.model) return;
+  const base = cfg.url.replace(/\/v1\/chat\/completions\/?$/, "");
+  fetch(`${base}/api/v1/${cfg.model}/load`, { method: "POST", headers: gatewayHeaders() }).catch(() => {});
+}
+setTimeout(warmup, 400); // após carregar cfg do storage
+
 $("btnSettings").onclick = () => $("settings").classList.toggle("hidden");
 $("btnSave").onclick = () => {
   cfg = {
@@ -32,6 +40,7 @@ $("btnSave").onclick = () => {
   };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
+  warmup();
 };
 
 // ---------- renderização Markdown (sem dependências, HTML sempre escapado) ----------
@@ -102,10 +111,14 @@ function gatewayHeaders() {
   return headers;
 }
 
+let modelsCache = null; // {t, data} — lista de /v1/models por 5 min
 async function ensureModel(headers) {
   if (cfg.model) return;
-  const mResp = await fetch(cfg.url.replace(/\/chat\/completions\/?$/, "/models"), { headers });
-  const first = (await mResp.json()).data?.[0]?.id;
+  if (!modelsCache || Date.now() - modelsCache.t > 300000) {
+    const mResp = await fetch(cfg.url.replace(/\/chat\/completions\/?$/, "/models"), { headers });
+    modelsCache = { t: Date.now(), data: (await mResp.json()).data || [] };
+  }
+  const first = modelsCache.data[0]?.id;
   if (!first) throw new Error("configure o modelo no ⚙︎ (GET /v1/models não retornou nada)");
   cfg.model = first;
   if (chrome.storage?.sync) chrome.storage.sync.set({ model: first });
@@ -121,7 +134,8 @@ async function llm(messages, maxTokens = 700) {
       const resp = await fetch(cfg.url, {
         method: "POST",
         headers,
-        body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0 })
+        // cache_prompt: o llama.cpp reaproveita o KV-cache do prefixo comum entre chamadas
+        body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0, cache_prompt: true })
       });
       if (resp.status >= 500) throw new Error("HTTP " + resp.status);
       if (!resp.ok) throw Object.assign(new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`), { fatal: true });
@@ -196,14 +210,23 @@ const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", n
 
 const VISION_MODEL = "mangaba-vision-q8";
 
-// captura de tela → descrição pelo modelo de visão do gateway
+// captura de tela → descrição pelo modelo de visão do gateway (com cache por imagem)
+const visionCache = new Map(); // hash da imagem → descrição
+function imgHash(s) {
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 97) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h + ":" + s.length;
+}
 async function llmVision(dataUrl, pergunta) {
+  const key = imgHash(dataUrl);
+  if (visionCache.has(key)) return visionCache.get(key);
   const resp = await fetch(cfg.url, {
     method: "POST",
     headers: gatewayHeaders(),
     body: JSON.stringify({
       model: VISION_MODEL,
       max_tokens: 400,
+      cache_prompt: true,
       messages: [{ role: "user", content: [
         { type: "text", text: pergunta },
         { type: "image_url", image_url: { url: dataUrl } }
@@ -211,7 +234,10 @@ async function llmVision(dataUrl, pergunta) {
     })
   });
   if (!resp.ok) throw new Error("visão HTTP " + resp.status);
-  return (await resp.json()).choices?.[0]?.message?.content || "";
+  const desc = (await resp.json()).choices?.[0]?.message?.content || "";
+  if (visionCache.size > 20) visionCache.clear();
+  visionCache.set(key, desc);
+  return desc;
 }
 
 // aceita variações que os modelos pequenos produzem:
@@ -249,14 +275,19 @@ function fmtSnapshot(s) {
   return `Página: ${s.title} — ${s.url} (vista até ${s.rolagem}% da altura)\nElementos interativos:\n${els}\nTrecho do texto: ${s.trecho}`;
 }
 
+const routeCache = new Map(); // tarefa → agente escolhido (evita chamada repetida ao orquestrador)
 async function pickAgent(task) {
+  const key = task.toLowerCase().trim().slice(0, 120);
+  if (routeCache.has(key)) return routeCache.get(key);
   const lista = AGENTS.map((a) => `${a.id}: ${a.desc}`).join("\n");
   const raw = await llm([
     { role: "system", content: "Você é o Orquestrador da equipe Mangaba AI. Escolha o agente mais adequado para a tarefa. Responda SOMENTE com JSON no formato {\"agente\":\"id\"}." },
     { role: "user", content: `Agentes:\n${lista}\n\nTarefa: ${task}` }
   ], 60);
   const id = parseAction(raw)?.agente;
-  return AGENTS.find((a) => a.id === id) || AGENTS[0];
+  const ag = AGENTS.find((a) => a.id === id) || AGENTS[0];
+  routeCache.set(key, ag);
+  return ag;
 }
 
 // ---- runtime do agente ----
@@ -401,17 +432,18 @@ async function runAgent(task) {
       const contexto = snap ? fmtSnapshot(snap) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
       const anteriores = agentHistory.slice(-3).map((h) => `- "${h.task}" → ${h.resposta.slice(0, 100)}`).join("\n");
 
+      // ordem pensada p/ KV-cache: partes estáveis/append-only primeiro, snapshot dinâmico por último
       const raw = await llm([
         { role: "system", content: agentSystem(agent) },
         { role: "user", content:
           `Tarefa do usuário: ${task}\n` +
           (plano.length ? `\nPlano combinado: ${plano.join("; ")}\n` : "") +
           (anteriores ? `\nTarefas anteriores nesta conversa:\n${anteriores}\n` : "") +
-          `\n${contexto}\n` +
-          (visited.length > 1 ? `\nPáginas já visitadas: ${visited.slice(-5).join(" → ")}\n` : "") +
+          `\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n` +
           (leitura ? `\nConteúdo lido da página (ação "ler"):\n${leitura}\n` : "") +
           (visao ? `\nO que você viu na captura de tela (ação "olhar"):\n${visao}\n` : "") +
-          `\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n` +
+          (visited.length > 1 ? `\nPáginas já visitadas: ${visited.slice(-5).join(" → ")}\n` : "") +
+          `\nEstado ATUAL da página:\n${contexto}\n` +
           `\nQual a próxima ação? Responda somente o JSON.` }
       ], 1200);
 
@@ -514,11 +546,15 @@ async function runAgent(task) {
 }
 
 // ---------- CHAT ----------
+let pageCtxCache = null; // {t, ctx} — evita reextrair a página em perguntas seguidas
 async function getPageContext() {
+  if (pageCtxCache && Date.now() - pageCtxCache.t < 5000) return pageCtxCache.ctx;
   const res = await chrome.runtime.sendMessage({ type: "GET_PAGE_CONTEXT" });
   if (!res?.ok) return null;
   const { title, url, text } = res.page;
-  return `Contexto da página aberta:\nTítulo: ${title}\nURL: ${url}\nConteúdo:\n${text}`;
+  const ctx = `Contexto da página aberta:\nTítulo: ${title}\nURL: ${url}\nConteúdo:\n${text}`;
+  pageCtxCache = { t: Date.now(), ctx };
+  return ctx;
 }
 
 async function send() {
@@ -562,7 +598,7 @@ async function send() {
     const resp = await fetch(cfg.url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ model: cfg.model, messages, stream: true })
+      body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true })
     });
     if (!resp.ok) { (bubble.closest(".arow") || bubble).remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
 
