@@ -21,6 +21,9 @@
   <label>API Key (opcional)
     <input id="cfgKey" type="password">
   </label>
+  <label>Máx. passos do agente (3–50)
+    <input id="cfgSteps" type="number" min="3" max="50" value="20">
+  </label>
   <button id="btnSave">Salvar</button>
 </div>
 
@@ -34,6 +37,13 @@
   <div class="ctxrow">
     <label class="ctx"><input type="checkbox" id="usePage" checked> Contexto da página</label>
     <label class="ctx"><input type="checkbox" id="agentMode"> 🤖 Modo agente</label>
+    <select id="agentSel" title="Qual agente executa a tarefa">
+      <option value="auto">🧠 Auto</option>
+      <option value="navegador">🧭 Navegador</option>
+      <option value="pesquisador">🔎 Pesquisador</option>
+      <option value="leitor">📖 Leitor</option>
+      <option value="preenchedor">📝 Preenchedor</option>
+    </select>
   </div>
   <div class="inputrow">
     <textarea id="input" rows="2" placeholder="Pergunte algo..."></textarea>

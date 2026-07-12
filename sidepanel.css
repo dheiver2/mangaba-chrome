@@ -90,6 +90,33 @@ main {
   align-self: flex-start; background: transparent; border: 1px dashed var(--borda);
   color: #8A7663; font-size: 12px; padding: 5px 10px;
 }
+.msg.agentstatus {
+  align-self: stretch; max-width: 100%; text-align: center;
+  background: #FFF3E4; border: 1px solid var(--borda);
+  color: #7A6A5C; font-size: 12px; font-weight: 600; border-radius: 10px;
+}
+details.steps {
+  border: 1px dashed var(--borda); border-radius: 10px;
+  padding: 6px 10px; font-size: 12px; color: #8A7663;
+}
+details.steps summary { cursor: pointer; font-weight: 700; user-select: none; }
+.stepline { padding: 3px 0; border-bottom: 1px dotted #F0E2CF; }
+.stepline:last-child { border-bottom: none; }
+.msg.confirm {
+  align-self: stretch; max-width: 100%;
+  background: #FFF8E1; border: 1px solid #F2D49B; font-size: 13px;
+}
+.msg.confirm.done { opacity: .55; }
+.msg.confirm button {
+  margin: 8px 8px 2px 0; padding: 5px 16px; border: none; border-radius: 8px;
+  background: var(--laranja); color: #fff; font-weight: 700; cursor: pointer;
+}
+.msg.confirm button.neg { background: #B3261E; }
+#agentSel {
+  margin-left: auto; font-size: 12px; color: var(--marrom);
+  border: 1px solid var(--borda); border-radius: 8px; background: #fff; padding: 2px 4px;
+}
+#btnSend.stop { background: #B3261E; font-size: 13px; }
 footer { padding: 10px 12px; background: var(--creme); border-top: 1px solid var(--borda); }
 .ctxrow { display: flex; gap: 14px; margin-bottom: 8px; }
 .ctx { display: flex; align-items: center; gap: 6px; font-size: 12px; }

@@ -10,7 +10,7 @@ Assistente de IA no painel lateral do Chrome, conectado ao **Mangaba Gateway** (
 - Configurável: URL do gateway, modelo e API key (⚙︎ no topo)
 
 ## Modo agente
-Marque **🤖 Modo agente** e peça, por exemplo: *"pesquise o preço da mangaba no Google"* ou *"abra g1.com e resuma a manchete"*. O Orquestrador escolhe o agente; ele age em até 15 passos (JSON por passo) e mostra cada ação no chat. Por segurança, os agentes nunca digitam senhas/cartões nem confirmam compras — devolvem a tarefa ao usuário nesses casos.
+Marque **🤖 Modo agente** e peça a tarefa. O fluxo: planejador gera um plano curto → Orquestrador (ou o agente escolhido no dropdown) executa em passos JSON com status ao vivo e lista de passos colapsável. Ferramentas: navegar, nova_aba, voltar, clicar, digitar, tecla, rolar, ler (com offset), esperar, perguntar (ao usuário) e concluir. Segurança: campos de senha são bloqueados; cliques/preenchimentos sensíveis (comprar, pagar, excluir, cartão, CPF...) pedem confirmação sua; botão ■ para a tarefa a qualquer momento.
 
 ## Instalação
 1. Abra `chrome://extensions`
