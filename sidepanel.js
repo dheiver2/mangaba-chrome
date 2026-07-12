@@ -137,7 +137,7 @@ async function ensureModel(headers) {
     modelsCache = { t: Date.now(), data: (await mResp.json()).data || [] };
   }
   const first = modelsCache.data[0]?.id;
-  if (!first) throw new Error("configure o modelo no ⚙︎ (GET /v1/models não retornou nada)");
+  if (!first) throw new Error("configure o modelo nas ConfiguraÃ§Ãµes (GET /v1/models não retornou nada)");
   cfg.model = first;
   if (chrome.storage?.sync) chrome.storage.sync.set({ model: first });
   $("cfgModel").value = first;
@@ -186,12 +186,12 @@ async function llm(messages, maxTokens = 700, signal) {
 
 // ---------- MODO AGENTE ----------
 const AGENTS = [
-  { id: "navegador",   nome: "🧭 Navegador",   desc: "abre sites, clica em links e botões, navega entre páginas" },
-  { id: "pesquisador", nome: "🔎 Pesquisador", desc: "pesquisa e investiga informações na web em várias fontes e cruza os dados" },
-  { id: "leitor",      nome: "📖 Leitor",      desc: "lê, resume e extrai dados do conteúdo de páginas" },
-  { id: "preenchedor", nome: "📝 Preenchedor", desc: "especialista em formulários: cadastros, inscrições, contato, checkout — mapeia, preenche, seleciona opções e marca caixas" },
-  { id: "social",      nome: "💬 Social",      desc: "lê caixas de entrada e DMs em redes sociais (WhatsApp Web, Instagram, X, LinkedIn, Messenger, e-mail) e redige respostas" },
-  { id: "acesso",      nome: "🔐 Acesso",      desc: "abre a tela de login de plataformas e conduz o acesso — sem nunca digitar sua senha" }
+  { id: "navegador",   nome: "Navegador",   desc: "abre sites, clica em links e botões, navega entre páginas" },
+  { id: "pesquisador", nome: "Pesquisador", desc: "pesquisa e investiga informações na web em várias fontes e cruza os dados" },
+  { id: "leitor",      nome: "Leitor",      desc: "lê, resume e extrai dados do conteúdo de páginas" },
+  { id: "preenchedor", nome: "Preenchedor", desc: "especialista em formulários: cadastros, inscrições, contato, checkout — mapeia, preenche, seleciona opções e marca caixas" },
+  { id: "social",      nome: "Social",      desc: "lê caixas de entrada e DMs em redes sociais (WhatsApp Web, Instagram, X, LinkedIn, Messenger, e-mail) e redige respostas" },
+  { id: "acesso",      nome: "Acesso",      desc: "abre a tela de login de plataformas e conduz o acesso — sem nunca digitar sua senha" }
 ];
 
 const PESQUISADOR_FLUXO = `
@@ -235,7 +235,7 @@ FLUXO DE LEITURA (siga à risca):
 const FLUXOS = { pesquisador: PESQUISADOR_FLUXO, social: SOCIAL_FLUXO, acesso: LOGIN_FLUXO, leitor: LEITOR_FLUXO };
 
 // Agente ÚNICO (padrão): faz tudo, sem o usuário precisar escolher especialidade.
-const UNIFIED = { id: "mangaba", nome: "🥭 Mangaba", desc: "assistente completa que navega, pesquisa, lê, preenche formulários, interage em redes sociais e conduz login" };
+const UNIFIED = { id: "mangaba", nome: "Mangaba", desc: "assistente completa que navega, pesquisa, lê, preenche formulários, interage em redes sociais e conduz login" };
 const UNIFIED_FLUXO = `
 
 VOCÊ FAZ TUDO — adapte-se ao que a tarefa pede:
@@ -428,10 +428,10 @@ function fmtSnapshot(s, prevKeys) {
     if (e.href) ln += ` → ${e.href}`;
     if (e.valor) ln += ` (valor: "${e.valor}")`;
     if (e.naTela === false) ln += " (fora da tela — role p/ ver)";
-    if (prevKeys && prevKeys.size && !prevKeys.has(elKey(e))) ln += " 🆕";
+    if (prevKeys && prevKeys.size && !prevKeys.has(elKey(e))) ln += " [novo]";
     return ln;
   }).join("\n");
-  return `Página: ${s.title} — ${s.url} (vista até ${s.rolagem}% da altura)\nElementos interativos${prevKeys && prevKeys.size ? " (🆕 = surgiu agora)" : ""}:\n${els}\nTrecho do texto: ${s.trecho}`;
+  return `Página: ${s.title} — ${s.url} (vista até ${s.rolagem}% da altura)\nElementos interativos${prevKeys && prevKeys.size ? " ([novo] = surgiu agora)" : ""}:\n${els}\nTrecho do texto: ${s.trecho}`;
 }
 
 const routeCache = new Map(); // tarefa → agente escolhido (evita chamada repetida ao orquestrador)
@@ -456,7 +456,7 @@ const SENSITIVE_CLICK = /comprar|pagar|pagamento|checkout|finalizar|enviar|send|
 const SENSITIVE_FIELD = /senha|password|cart[ãa]o|cvv|cpf|cnpj|\brg\b|c[óo]digo|token|2fa|otp|pin/i;
 
 function setStop(on) {
-  btnSend.textContent = on ? "■" : "➤";
+  btnSend.textContent = on ? "■" : "↑";
   btnSend.title = on ? "Parar tarefa" : "Enviar";
   btnSend.classList.toggle("stop", on);
 }
@@ -489,7 +489,7 @@ function confirmAction(texto) {
     const div = document.createElement("div");
     div.className = "msg confirm";
     const p = document.createElement("p");
-    p.textContent = "⚠️ O agente quer " + texto + ". Permitir?";
+    p.textContent = "O agente quer " + texto + ". Permitir?";
     const ok = document.createElement("button");
     ok.textContent = "Permitir";
     const no = document.createElement("button");
@@ -514,27 +514,28 @@ const elLabel = (snap, i) => snap?.elements?.find((e) => e.i === i)?.texto || ""
 
 function describeAction(act, label) {
   const a = act.args || {};
+  const alvo = label ? ` "${label}"` : "";
   switch (act.tool) {
-    case "navegar": return `🌐 Abrindo ${a.url}`;
-    case "nova_aba": return `🗂️ Nova aba: ${a.url}`;
-    case "voltar": return "↩️ Voltando à página anterior";
-    case "clicar": return `🖱️ Clicando em [${a.i}] "${label}"`;
-    case "digitar": return `⌨️ Digitando "${String(a.texto || "").slice(0, 40)}" em [${a.i}] "${label}"`;
-    case "tecla": return `⏎ ${a.tecla || "Enter"} em [${a.i}] "${label}"`;
-    case "rolar": return `↕️ Rolando para ${a.dir || "baixo"}`;
-    case "rolar_ate": return `🔎 Rolando até "${a.texto}"`;
-    case "extrair": return `📑 Extraindo: ${a.o_que || "dados"}`;
-    case "ler": return `📖 Lendo a página${a.offset ? ` (a partir de ${a.offset})` : ""}`;
-    case "esperar": return `⏱️ Esperando ${a.segundos || 1}s`;
-    case "olhar": return "👁️ Olhando a página (captura + visão)";
-    case "listar_abas": return "🗂️ Listando abas abertas";
-    case "trocar_aba": return `↔️ Indo para a aba [${a.id}]`;
-    case "formulario": return "📋 Mapeando o formulário";
-    case "preencher": return `📝 Preenchendo ${(a.campos || []).length} campo(s)`;
-    case "selecionar": return `▾ Selecionando "${a.opcao}" em [${a.i}] "${label}"`;
-    case "marcar": return `☑️ ${a.valor === false ? "Desmarcando" : "Marcando"} [${a.i}] "${label}"`;
-    case "curtir": return `❤️ Curtindo [${a.i}] "${label}"`;
-    default: return `${act.tool} ${JSON.stringify(a)}`;
+    case "navegar": return `Abrindo ${a.url}`;
+    case "nova_aba": return `Abrindo nova aba: ${a.url}`;
+    case "voltar": return "Voltando à página anterior";
+    case "clicar": return `Clicando em${alvo}`;
+    case "digitar": return `Digitando "${String(a.texto || "").slice(0, 50)}"`;
+    case "tecla": return `Pressionando ${a.tecla || "Enter"}`;
+    case "rolar": return `Rolando para ${a.dir || "baixo"}`;
+    case "rolar_ate": return `Rolando até "${a.texto}"`;
+    case "extrair": return `Extraindo: ${a.o_que || "dados"}`;
+    case "ler": return `Lendo a página${a.offset ? ` (continuação)` : ""}`;
+    case "esperar": return `Aguardando ${a.segundos || 1}s`;
+    case "olhar": return "Analisando a tela";
+    case "listar_abas": return "Listando abas abertas";
+    case "trocar_aba": return `Trocando de aba`;
+    case "formulario": return "Mapeando o formulário";
+    case "preencher": return `Preenchendo ${(a.campos || []).length} campo(s)`;
+    case "selecionar": return `Selecionando "${a.opcao}"${alvo}`;
+    case "marcar": return `${a.valor === false ? "Desmarcando" : "Marcando"}${alvo}`;
+    case "curtir": return `Curtindo${alvo}`;
+    default: return `${act.tool}`;
   }
 }
 
@@ -545,10 +546,10 @@ async function runAgent(task) {
   const secs = () => Math.round((Date.now() - t0) / 1000);
   const status = document.createElement("div");
   status.className = "msg agentstatus";
-  status.textContent = "🧠 Planejando...";
+  status.textContent = "Planejando...";
   chat.appendChild(status);
   const box = stepsBox();
-  let statusTxt = "🧠 Planejando";
+  let statusTxt = "Planejando";
   const tick = setInterval(() => {
     if (statusTxt) status.textContent = `${statusTxt} · ${secs()}s`;
   }, 1000);
@@ -559,8 +560,8 @@ async function runAgent(task) {
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
     statusTxt = null;
-    if (visited.length) box.add("📍 Páginas: " + visited.slice(-5).join(" → "));
-    status.textContent = `✅ Concluído · ${box.n} passos · ${secs()}s`;
+    if (visited.length) box.add("Páginas: " + visited.slice(-5).join(" → "));
+    status.textContent = `Concluído · ${box.n} passos · ${secs()}s`;
     box.det.open = false;
     addMsg("assistant", r);
     agentHistory.push({ task, resposta: r });
@@ -585,8 +586,8 @@ async function runAgent(task) {
         : (x && typeof x === "object") ? Object.values(x).flatMap(achata) : [String(x)];
       if (p?.plano) plano = achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4);
     } catch { /* plano é opcional */ }
-    if (plano.length) box.add("🗺️ Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
-    if (meta >= 2) box.add(`🎯 Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
+    if (plano.length) box.add("Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
+    if (meta >= 2) box.add(`Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
 
     // agente: manual (dropdown) ou orquestrador
     const sel = $("agentSel")?.value || "auto";
@@ -603,15 +604,15 @@ async function runAgent(task) {
         if (meta >= 2 && !metaLembrete) {
           metaLembrete = true;
           feitas.push(`ANTES de concluir: a tarefa pedia ${meta} itens. Confira se TODOS os ${meta} foram feitos. Se faltou algum, faça agora; se já fez todos, conclua de novo.`);
-          box.add(`🎯 Conferindo se os ${meta} itens foram feitos`);
+          box.add(`Conferindo se os ${meta} itens foram feitos`);
           return "BREAK";
         }
         finish(act.args?.resposta); return "FINISH";
       }
 
       if (act.tool === "olhar") {
-        box.add(`${passo}. 👁️ Olhando a página (captura + visão)`);
-        statusTxt = "👁️ Analisando a captura";
+        box.add(`${passo}. Olhando a página (captura + visão)`);
+        statusTxt = "Analisando a captura";
         const res = await tool("olhar", {});
         if (res?.ok && res.out?.dataUrl) {
           try {
@@ -630,8 +631,8 @@ async function runAgent(task) {
 
       if (act.tool === "extrair") {
         const oq = act.args?.o_que || "as informações principais";
-        box.add(`${passo}. 📑 Extraindo: ${oq}`);
-        statusTxt = "📑 Extraindo dados da página";
+        box.add(`${passo}. Extraindo: ${oq}`);
+        statusTxt = "Extraindo dados da página";
         const res = await tool("ler", {});
         if (res?.ok) {
           try {
@@ -653,9 +654,9 @@ async function runAgent(task) {
 
       if (act.tool === "perguntar") {
         const q = act.args?.pergunta || "Pode dar mais detalhes sobre o que você quer?";
-        box.add("❓ Perguntando ao usuário");
+        box.add("Perguntando ao usuário");
         statusTxt = null;
-        status.textContent = "⏸️ Aguardando sua resposta...";
+        status.textContent = "Aguardando sua resposta...";
         const ans = await askUser(q);
         statusTxt = `${agent.nome} · retomando`;
         feitas.push(`perguntar "${q.slice(0, 60)}" → usuário respondeu: "${ans.slice(0, 150)}"`);
@@ -674,7 +675,7 @@ async function runAgent(task) {
           (act.tool === "preencher" ? (act.args?.campos || []).some((c) => SENSITIVE_FIELD.test(rotuloForm(c.i))) : SENSITIVE_FIELD.test(label)));
       if (sensivel) {
         statusTxt = null;
-        status.textContent = "⏸️ Aguardando sua confirmação...";
+        status.textContent = "Aguardando sua confirmação...";
         const descConf = ehEnvioMsg
           ? (ultimoTexto ? `publicar o comentário/mensagem: "${ultimoTexto.slice(0, 140)}"` : "enviar/publicar a mensagem")
           : `${act.tool} em "${label}"`;
@@ -682,7 +683,7 @@ async function runAgent(task) {
         statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
         if (!okd) {
           feitas.push(`usuário NEGOU ${act.tool} em "${label}" — não tente de novo; siga outro caminho ou conclua`);
-          box.add("🚫 Ação negada por você");
+          box.add("Ação negada por você");
           return "BREAK";
         }
       }
@@ -724,12 +725,12 @@ async function runAgent(task) {
     for (let passo = 1; passo <= maxSteps; passo++) {
       if (agentRun.cancel) {
         statusTxt = null;
-        status.textContent = `⏹ Interrompido por você · ${box.n} passos · ${secs()}s`;
+        status.textContent = `Interrompido por você · ${box.n} passos · ${secs()}s`;
         return;
       }
       if (secs() > 240) { // teto de tempo: nunca rodar por minutos a fio
         statusTxt = null;
-        status.textContent = `⏱️ Tempo limite (4 min) · ${box.n} passos`;
+        status.textContent = `Tempo limite (4 min) · ${box.n} passos`;
         addMsg("err", "Tarefa interrompida por tempo (4 min). Divida em pedidos menores ou use um modelo mais rápido.");
         return;
       }
@@ -743,7 +744,7 @@ async function runAgent(task) {
             { role: "system", content: "Resuma em 2-3 linhas curtas e factuais o que o agente JÁ fez até aqui (memória de longo prazo). Sem inventar." },
             { role: "user", content: (resumoMemoria ? `Resumo anterior:\n${resumoMemoria}\n\n` : "") + `Ações a resumir:\n${antigas.join("\n")}` }
           ], 200);
-          if (resumo.trim()) { resumoMemoria = resumo.trim().slice(0, 800); feitas.splice(0, feitas.length - 8); box.add("🧠 Memória: histórico antigo resumido"); }
+          if (resumo.trim()) { resumoMemoria = resumo.trim().slice(0, 800); feitas.splice(0, feitas.length - 8); box.add("Memória: histórico antigo resumido"); }
         } catch { /* opcional */ }
       }
 
@@ -751,7 +752,7 @@ async function runAgent(task) {
       let snap = snapRes?.ok ? snapRes.out : null;
       // VERIFICAÇÃO PÓS-NAVEGAÇÃO: página quase vazia após navegar = ainda carregando → espera e re-observa 1x
       if (esperavaMudanca && snap && snap.elements.length < 5) {
-        box.add("⏳ Página carregando — aguardando");
+        box.add("Página carregando — aguardando");
         await tool("esperar", { segundos: 2 });
         snapRes = await tool("snapshot", {});
         snap = snapRes?.ok ? snapRes.out : snap;
@@ -762,8 +763,8 @@ async function runAgent(task) {
       // AUTO-RECUPERAÇÃO: se a última ação de navegação não mudou nada, avisa o modelo p/ tentar outro caminho
       const pageSig = snap ? snap.url + "|" + snap.elements.length : "";
       if (esperavaMudanca && pageSig && pageSig === sigAnterior) {
-        feitas.push("⚠️ a última ação NÃO mudou a página (mesmo URL e elementos) — o alvo pode estar errado ou não ser clicável; escolha OUTRO elemento, role até ele ('rolar_ate') ou use 'esperar' se estiver carregando.");
-        box.add("🔧 Ação sem efeito — tentando outro caminho");
+        feitas.push("a última ação NÃO mudou a página (mesmo URL e elementos) — o alvo pode estar errado ou não ser clicável; escolha OUTRO elemento, role até ele ('rolar_ate') ou use 'esperar' se estiver carregando.");
+        box.add("Ação sem efeito — tentando outro caminho");
       }
       esperavaMudanca = false;
       sigAnterior = pageSig;
@@ -803,11 +804,11 @@ async function runAgent(task) {
         if (!clean.includes("{") && leitura && clean.length > 40) { finish(clean); return; }
         invalidos++;
         feitas.push(`resposta inválida ("${clean.slice(0, 80)}") → responda EXATAMENTE {"tool":"nome","args":{...}}`);
-        box.add(`⚠️ Formato inválido: ${clean.slice(0, 70) || "(vazio)"}`);
+        box.add(`Formato inválido: ${clean.slice(0, 70) || "(vazio)"}`);
         if (invalidos >= 4) {
           statusTxt = null;
-          status.textContent = `❌ Modelo não retornou ações válidas · ${secs()}s`;
-          addMsg("err", `O modelo respondeu fora do formato JSON ${invalidos}× seguidas (última: "${clean.slice(0, 120) || "vazia"}"). Tente um modelo maior no ⚙︎ (ex.: mangaba-pro ou mangaba-max) — os menores erram a sintaxe do JSON.`);
+          status.textContent = `Modelo não retornou ações válidas · ${secs()}s`;
+          addMsg("err", `O modelo respondeu fora do formato JSON ${invalidos}× seguidas (última: "${clean.slice(0, 120) || "vazia"}"). Tente um modelo maior nas ConfiguraÃ§Ãµes (ex.: mangaba-pro ou mangaba-max) — os menores erram a sintaxe do JSON.`);
           return;
         }
         continue;
@@ -822,17 +823,17 @@ async function runAgent(task) {
         avisosLoop++;
         if (avisosLoop >= 2) {
           statusTxt = null;
-          status.textContent = `⚠️ Preso em repetição · ${box.n} passos · ${secs()}s`;
-          addMsg("err", "O agente ficou repetindo a mesma ação sem progredir. Tente um modelo maior no ⚙︎ (mangaba-pro/max) ou reformule o pedido.");
+          status.textContent = `Preso em repetição · ${box.n} passos · ${secs()}s`;
+          addMsg("err", "O agente ficou repetindo a mesma ação sem progredir. Tente um modelo maior nas ConfiguraÃ§Ãµes (mangaba-pro/max) ou reformule o pedido.");
           return;
         }
         feitas.push("ATENÇÃO: você repetiu a mesma ação sem progresso; MUDE de estratégia AGORA ou use \"concluir\".");
-        box.add("♻️ Ação repetida — pedindo mudança de estratégia");
+        box.add("Ação repetida — pedindo mudança de estratégia");
         lastCount = 0;
         continue;
       }
 
-      if (acts.length > 1) box.add(`⚡ Lote de ${acts.length} ações`);
+      if (acts.length > 1) box.add(`Lote de ${acts.length} ações`);
       // executa o lote; para no 1º sinal de re-observação (navegação/erro/pausa) — evita índices obsoletos
       for (let act of acts) {
         if (agentRun.cancel) break; // parou no meio do lote: não executa o resto
@@ -841,11 +842,11 @@ async function runAgent(task) {
           rolares++;
           const limite = agent.id === "leitor" ? 1 : 3;
           if (!leuAlguma && rolares >= limite) {
-            box.add("📖 Rolar não é preciso para ler — lendo a página inteira");
+            box.add("Rolar não é preciso para ler — lendo a página inteira");
             act = { tool: "ler", args: {} };
           } else if (rolares > 6) {
             feitas.push("Você rolou vezes demais sem concluir. PARE de rolar: use \"ler\" e depois \"concluir\".");
-            box.add("♻️ Rolagem em excesso — pare e conclua");
+            box.add("Rolagem em excesso — pare e conclua");
             break;
           }
         }
@@ -855,14 +856,14 @@ async function runAgent(task) {
       }
     }
     statusTxt = null;
-    status.textContent = `⚠️ Limite de ${maxSteps} passos atingido · ${secs()}s`;
-    addMsg("err", "Não concluí dentro do limite de passos. Refine o pedido ou aumente o limite no ⚙︎.");
+    status.textContent = `Limite de ${maxSteps} passos atingido · ${secs()}s`;
+    addMsg("err", "Não concluí dentro do limite de passos. Refine o pedido ou aumente o limite nas ConfiguraÃ§Ãµes.");
   } catch (e) {
     statusTxt = null;
     if (agentRun?.cancel || e.name === "AbortError") {
-      status.textContent = `⏹ Parado por você · ${box.n} passos · ${secs()}s`;
+      status.textContent = `Parado por você · ${box.n} passos · ${secs()}s`;
     } else {
-      status.textContent = `❌ Erro · ${secs()}s`;
+      status.textContent = `Erro · ${secs()}s`;
       addMsg("err", "Erro no modo agente: " + e.message);
     }
   } finally {
