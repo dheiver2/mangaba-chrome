@@ -276,7 +276,27 @@ function parseAction(raw) {
       try { return JSON.parse(block); } catch { return repairJson(block); }
     }
   }
-  return null;
+  return salvageAcoes(clean); // objeto nunca fechou: provável lote truncado
+}
+
+// lote {"acoes":[...]} truncado no meio: coleta as ações COMPLETAS e descarta a incompleta
+function salvageAcoes(raw) {
+  const i = raw.indexOf('"acoes"');
+  if (i < 0) return null;
+  const arr = raw.indexOf("[", i);
+  if (arr < 0) return null;
+  const objs = [];
+  let depth = 0, start = -1, str = false, escd = false;
+  for (let k = arr + 1; k < raw.length; k++) {
+    const c = raw[k];
+    if (escd) { escd = false; continue; }
+    if (c === "\\") { escd = true; continue; }
+    if (c === '"') str = !str;
+    if (str) continue;
+    if (c === "{") { if (depth === 0) start = k; depth++; }
+    else if (c === "}") { if (--depth === 0 && start >= 0) { try { objs.push(JSON.parse(raw.slice(start, k + 1))); } catch { /* ignora */ } start = -1; } }
+  }
+  return objs.length ? { acoes: objs } : null;
 }
 
 // modelos pequenos erram a sintaxe: {"listar_abas","args":{}} (vírgula no lugar de :), {"clicar"} etc.
@@ -657,7 +677,7 @@ async function runAgent(task) {
           (visited.length > 1 ? `\nPáginas já visitadas: ${visited.slice(-5).join(" → ")}\n` : "") +
           `\nEstado ATUAL da página:\n${contexto}\n` +
           `\nQual a próxima ação? Responda somente o JSON.` }
-      ], 500);
+      ], 700);
 
       const parsed = parseAction(raw);
       let acts;
