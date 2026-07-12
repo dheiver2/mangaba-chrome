@@ -77,6 +77,13 @@ main {
   padding: 10px 12px; margin: 6px 0; overflow-x: auto;
 }
 .msg.assistant pre code { background: none; color: inherit; padding: 0; }
+.msg.assistant hr { border: none; border-top: 1px solid var(--borda); margin: 12px 0; }
+.tblwrap { overflow-x: auto; margin: 8px 0; }
+.msg.assistant table { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+.msg.assistant th, .msg.assistant td {
+  border: 1px solid var(--borda); padding: 5px 9px; text-align: left; vertical-align: top;
+}
+.msg.assistant th { background: #F8ECDD; font-weight: 700; white-space: nowrap; }
 .dots { display: inline-flex; gap: 4px; padding: 4px 2px; }
 .dots span {
   width: 7px; height: 7px; border-radius: 50%; background: #D9BFA6;
@@ -151,6 +158,7 @@ textarea {
   #settings, .msg.assistant, #agentSel, textarea { background: #2E2419; color: var(--marrom); }
   #settings input { background: #241C15; color: var(--marrom); }
   .msg.assistant code { background: #3A2C1D; }
+  .msg.assistant th { background: #3A2C1D; }
   .msg.assistant a { color: #FF9C4A; }
   .copybtn { color: #9A8570; }
   .msg.step, details.steps { color: #9A8570; }

@@ -64,22 +64,35 @@ $("btnSave").onclick = () => {
 // escapa também aspas: senão uma URL com " quebra o atributo href e injeta handlers (XSS)
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
+const inline = (s) => s
+  .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+  .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+  .replace(/(^|\s)\*([^*\n]+)\*(?=\s|[.,;:!?]|$)/g, "$1<i>$2</i>")
+  .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
 function md(src) {
   const blocks = [];
+  // blocos de código
   src = src.replace(/```(\w*)\n?([\s\S]*?)(```|$)/g, (_, lang, code) => {
     blocks.push(`<pre><code>${esc(code.replace(/\n$/, ""))}</code></pre>`);
     return `\x00${blocks.length - 1}\x00`;
   });
-  let h = esc(src)
-    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-    .replace(/(^|\s)\*([^*\n]+)\*(?=\s|[.,;:!?]|$)/g, "$1<i>$2</i>")
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // TABELAS (GitHub markdown): cabeçalho + linha separadora + corpo
+  src = src.replace(/(^|\n)[ \t]*\|(.+)\|[ \t]*\n[ \t]*\|[ \t:|-]+\|[ \t]*\n((?:[ \t]*\|.*\|[ \t]*(?:\n|$))+)/g,
+    (_, pre, header, body) => {
+      const cels = (row) => row.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(esc(c.trim())));
+      const th = cels(header).map((c) => `<th>${c}</th>`).join("");
+      const trs = body.trim().split("\n").filter((r) => r.trim()).map((r) => `<tr>${cels(r).map((c) => `<td>${c}</td>`).join("")}</tr>`).join("");
+      blocks.push(`<div class="tblwrap"><table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table></div>`);
+      return `${pre}\x00${blocks.length - 1}\x00\n`;
+    });
+  let h = inline(esc(src));
   let out = "", list = null;
   const closeList = () => { if (list) { out += `</${list}>`; list = null; } };
   for (const ln of h.split("\n")) {
     let m;
-    if ((m = ln.match(/^(#{1,4})\s+(.*)/))) { closeList(); out += `<h4>${m[2]}</h4>`; }
+    if (/^\s*(?:[-*_]\s*){3,}$/.test(ln) && !/[^\s\-*_]/.test(ln)) { closeList(); out += "<hr>"; } // régua ---
+    else if ((m = ln.match(/^(#{1,4})\s+(.*)/))) { closeList(); out += `<h4>${m[2]}</h4>`; }
     else if ((m = ln.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { closeList(); out += "<ul>"; list = "ul"; } out += `<li>${m[1]}</li>`; }
     else if ((m = ln.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== "ol") { closeList(); out += "<ol>"; list = "ol"; } out += `<li>${m[1]}</li>`; }
     else if (!ln.trim()) closeList();
@@ -926,7 +939,7 @@ async function send() {
     btnSend.disabled = true;
     const messages = [{
       role: "system",
-      content: "Você é a Mangaba, assistente de IA brasileira. Responda em português do Brasil, de forma clara e objetiva. Use Markdown quando ajudar na leitura."
+      content: "Você é a Mangaba, assistente de IA brasileira. Responda em português do Brasil, de forma clara e objetiva. Use Markdown quando ajudar (títulos, listas, tabelas). Evite emojis decorativos — prefira texto limpo e profissional."
     }];
     const ctx = await getPageContext(); // sempre usa o contexto da página no chat
     if (ctx) messages.push({ role: "system", content: ctx });
