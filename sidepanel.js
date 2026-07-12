@@ -245,7 +245,7 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 
 IMPORTANTE: responda começando com "{". Na ação "concluir", seja breve na resposta (máx. ~150 palavras).
 
-MAIS RÁPIDO — várias ações de uma vez: quando os próximos passos forem óbvios e na MESMA página (ex.: preencher campos e marcar caixas), envie um lote: {"acoes":[{"tool":"preencher","args":{...}},{"tool":"marcar","args":{"i":4,"valor":true}}]}. As ações rodam em sequência. Após QUALQUER ação que mude de página (navegar, clicar, tecla, curtir, voltar), o lote para e você verá o novo estado — então não coloque ações depois dessas no mesmo lote.
+Envie SEMPRE UMA ÚNICA ação por vez — apenas um objeto JSON. NÃO agrupe várias ações. Faça a próxima ação, veja o resultado no próximo passo, e então decida a seguinte. (Para preencher vários campos de um formulário, use a ferramenta "preencher" — ela já aceita vários campos numa única ação.)
 
 Dicas: só use "clicar"/"digitar" em índices [N] que existam na lista de elementos. Para pesquisar na web, navegue direto para https://duckduckgo.com/html/?q=SUA+BUSCA e depois use "ler". Se a página atual não serve para a tarefa, comece com "navegar". Se faltar informação essencial do usuário (ex.: qual cidade, qual produto), use "perguntar".
 
