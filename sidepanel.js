@@ -125,11 +125,21 @@ async function ensureModel(headers) {
   $("cfgModel").value = first;
 }
 
+// separa erro temporário (túnel/gateway ocupado, HTML, 5xx, 404, rede) de erro fatal (config/4xx real)
+function classificaErro(status, body) {
+  const html = /^\s*<(?:!doctype|html)/i.test(body || "");
+  if (html || status === 404 || status === 502 || status === 503 || status === 504 || status >= 500) {
+    return { temp: true, msg: html ? `túnel/gateway indisponível (HTTP ${status})` : `HTTP ${status}` };
+  }
+  return { temp: false, msg: `HTTP ${status}: ${(body || "").replace(/<[^>]+>/g, " ").slice(0, 160)}` };
+}
+
 // chamada não-streaming com retry (usada pelos agentes)
 async function llm(messages, maxTokens = 700) {
   const headers = gatewayHeaders();
   await ensureModel(headers);
-  for (let tent = 1; ; tent++) {
+  let ult = "";
+  for (let tent = 1; tent <= 4; tent++) {
     try {
       const resp = await fetch(cfg.url, {
         method: "POST",
@@ -137,12 +147,16 @@ async function llm(messages, maxTokens = 700) {
         // cache_prompt: o llama.cpp reaproveita o KV-cache do prefixo comum entre chamadas
         body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0, cache_prompt: true })
       });
-      if (resp.status >= 500) throw new Error("HTTP " + resp.status);
-      if (!resp.ok) throw Object.assign(new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`), { fatal: true });
+      if (!resp.ok) {
+        const c = classificaErro(resp.status, (await resp.text()).slice(0, 300));
+        if (!c.temp) throw Object.assign(new Error(c.msg), { fatal: true });
+        throw new Error((ult = c.msg));
+      }
       return (await resp.json()).choices?.[0]?.message?.content || "";
     } catch (e) {
-      if (e.fatal || tent >= 3) throw e;
-      await sleep(800 * tent); // retry em falha de rede/5xx
+      if (e.fatal) throw e;
+      if (tent >= 4) throw new Error(`Gateway não respondeu após ${tent} tentativas (${ult || e.message}). Verifique se o Mangaba Gateway e o túnel estão no ar; se trocou de modelo, aguarde ele carregar do HD.`);
+      await sleep(1000 * tent); // espera crescente: cobre troca de modelo no USB 2.0
     }
   }
 }
@@ -298,7 +312,7 @@ async function llmVision(dataUrl, pergunta) {
       ] }]
     })
   });
-  if (!resp.ok) throw new Error("visão HTTP " + resp.status);
+  if (!resp.ok) throw new Error("visão: " + classificaErro(resp.status, (await resp.text()).slice(0, 200)).msg);
   const desc = (await resp.json()).choices?.[0]?.message?.content || "";
   if (visionCache.size > 20) visionCache.clear();
   visionCache.set(key, desc);
