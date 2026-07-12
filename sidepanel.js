@@ -649,14 +649,15 @@ async function runAgent(task) {
           (plano.length ? `\nPlano combinado: ${plano.join("; ")}\n` : "") +
           (meta >= 2 ? `\nMETA: ${meta} itens no total. Trabalhe UM item por vez; só use "concluir" quando os ${meta} estiverem realmente feitos. Vá contando quantos já completou.\n` : "") +
           (anteriores ? `\nTarefas anteriores nesta conversa:\n${anteriores}\n` : "") +
-          `\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n` +
+          // só as últimas 10 ações (o histórico não pode crescer sem limite: infla o prompt e trava o modelo)
+          `\nAções já executadas${feitas.length > 10 ? ` (últimas 10 de ${feitas.length})` : ""}:\n${feitas.length ? feitas.slice(-10).map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n` +
           (leitura ? `\nConteúdo lido da página (ação "ler"):\n${leitura}\n` : "") +
           (visao ? `\nO que você viu na captura de tela (ação "olhar"):\n${visao}\n` : "") +
           (form ? `\nMapa do formulário (ação "formulario"):\n${form}\n` : "") +
           (visited.length > 1 ? `\nPáginas já visitadas: ${visited.slice(-5).join(" → ")}\n` : "") +
           `\nEstado ATUAL da página:\n${contexto}\n` +
           `\nQual a próxima ação? Responda somente o JSON.` }
-      ], 1200);
+      ], 500);
 
       const parsed = parseAction(raw);
       let acts;

@@ -58,7 +58,7 @@ const snapshotFn = () => {
         naTela: r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
       };
     }),
-    trecho: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 1200)
+    trecho: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 700)
   };
 };
 // Mapa detalhado do formulário. Usa o MESMO percurso do snapshot para que os
