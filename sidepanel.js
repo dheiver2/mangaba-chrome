@@ -44,7 +44,8 @@ $("btnSave").onclick = () => {
 };
 
 // ---------- renderização Markdown (sem dependências, HTML sempre escapado) ----------
-const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// escapa também aspas: senão uma URL com " quebra o atributo href e injeta handlers (XSS)
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 function md(src) {
   const blocks = [];
