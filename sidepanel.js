@@ -751,7 +751,7 @@ async function send() {
 
   // resposta a uma pergunta do agente em andamento
   if (agentRun?.waiting) {
-    input.value = "";
+    input.value = ""; input.style.height = "";
     addMsg("user", question);
     const resolve = agentRun.waiting;
     agentRun.waiting = null;
@@ -761,7 +761,7 @@ async function send() {
   }
   if (agentRun) return; // agente ocupado: use ■ para parar
 
-  input.value = "";
+  input.value = ""; input.style.height = "";
   addMsg("user", question);
 
   try {
@@ -831,3 +831,6 @@ btnSend.onclick = () => {
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
 });
+// textarea cresce com o conteúdo (até o teto do CSS)
+function autoGrow() { input.style.height = "auto"; input.style.height = Math.min(120, input.scrollHeight) + "px"; }
+input.addEventListener("input", autoGrow);

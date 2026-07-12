@@ -126,6 +126,7 @@ textarea {
   flex: 1; resize: none; padding: 8px 10px; font: inherit;
   background: #fff; border: 1px solid var(--borda); border-radius: 10px;
   outline-color: var(--laranja);
+  max-height: 120px; overflow-y: auto; /* cresce até 120px, depois rola */
 }
 #btnSend {
   width: 42px; border: none; border-radius: 10px; background: var(--laranja);
@@ -133,3 +134,24 @@ textarea {
 }
 #btnSend:hover { background: var(--laranja-escuro); }
 #btnSend:disabled { opacity: .5; cursor: default; }
+
+/* ===== Modo escuro (segue o tema do navegador) ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --creme: #241C15;
+    --pessego: #1A130D;
+    --marrom: #F3E9DE;
+    --borda: #4A3A2C;
+  }
+  #settings, .msg.assistant, #agentSel, textarea { background: #2E2419; color: var(--marrom); }
+  #settings input { background: #241C15; color: var(--marrom); }
+  .msg.assistant code { background: #3A2C1D; }
+  .msg.assistant a { color: #FF9C4A; }
+  .copybtn { color: #9A8570; }
+  .msg.step, details.steps { color: #C9B8A6; }
+  .stepline { border-bottom-color: #3A2C1D; }
+  .msg.agentstatus { background: #33281B; color: #D8C7B4; }
+  .msg.confirm { background: #3A2E12; border-color: #6B531E; color: var(--marrom); }
+  .msg.err { background: #3A1E1E; color: #F5B5B5; }
+  .dots span { background: #6B563F; }
+}
