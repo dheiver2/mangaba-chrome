@@ -45,15 +45,19 @@ const snapshotFn = () => {
     url: location.href,
     title: document.title,
     rolagem: Math.min(100, Math.round(((scrollY + innerHeight) / alt) * 100)),
-    elements: els.map((el, i) => ({
-      i,
-      tag: el.tagName.toLowerCase(),
-      tipo: el.type || el.getAttribute("role") || "",
-      texto: (el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || "")
-        .trim().replace(/\s+/g, " ").slice(0, 70),
-      href: el.tagName === "A" && el.href ? String(el.href).slice(0, 70) : undefined,
-      valor: el.value && el.type !== "password" ? String(el.value).slice(0, 40) : undefined
-    })),
+    elements: els.map((el, i) => {
+      const r = el.getBoundingClientRect();
+      return {
+        i,
+        tag: el.tagName.toLowerCase(),
+        tipo: el.type || el.getAttribute("role") || "",
+        texto: (el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || "")
+          .trim().replace(/\s+/g, " ").slice(0, 70),
+        href: el.tagName === "A" && el.href ? String(el.href).slice(0, 70) : undefined,
+        valor: el.value && el.type !== "password" ? String(el.value).slice(0, 40) : undefined,
+        naTela: r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
+      };
+    }),
     trecho: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 1200)
   };
 };
@@ -255,7 +259,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         out = { dataUrl };
       } else {
         const tab = await getTab();
-        if (tool === "snapshot") out = await exec(tab.id, snapshotFn);
+        if (tool === "snapshot") {
+          // estabiliza o DOM (readyState + 2 frames) antes de fotografar — como o browser-use
+          await exec(tab.id, () => new Promise((res) => {
+            const done = () => requestAnimationFrame(() => requestAnimationFrame(res));
+            if (document.readyState === "complete") return done();
+            let n = 0;
+            const t = setInterval(() => {
+              if (document.readyState === "complete" || ++n > 20) { clearInterval(t); done(); }
+            }, 50);
+          })).catch(() => {});
+          out = await exec(tab.id, snapshotFn);
+        }
         else if (tool === "formulario") out = await exec(tab.id, formFn);
         else if (tool === "preencher") out = await exec(tab.id, preencherFn, [args.campos || []]);
         else if (tool === "selecionar") out = await exec(tab.id, selecionarFn, [args.i, String(args.opcao ?? "")]);

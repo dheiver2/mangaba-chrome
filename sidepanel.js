@@ -221,7 +221,9 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"perguntar","args":{"pergunta":"..."}} — fazer uma pergunta ao usuário quando faltar informação
 {"tool":"concluir","args":{"resposta":"..."}} — terminar a tarefa e responder ao usuário em PT-BR (use Markdown)
 
-IMPORTANTE: sua resposta deve conter apenas UM objeto JSON e começar com "{". Na ação "concluir", seja breve na resposta (máx. ~150 palavras).
+IMPORTANTE: responda começando com "{". Na ação "concluir", seja breve na resposta (máx. ~150 palavras).
+
+MAIS RÁPIDO — várias ações de uma vez: quando os próximos passos forem óbvios e na MESMA página (ex.: preencher campos e marcar caixas), envie um lote: {"acoes":[{"tool":"preencher","args":{...}},{"tool":"marcar","args":{"i":4,"valor":true}}]}. As ações rodam em sequência. Após QUALQUER ação que mude de página (navegar, clicar, tecla, curtir, voltar), o lote para e você verá o novo estado — então não coloque ações depois dessas no mesmo lote.
 
 Dicas: só use "clicar"/"digitar" em índices [N] que existam na lista de elementos. Para pesquisar na web, navegue direto para https://duckduckgo.com/html/?q=SUA+BUSCA e depois use "ler". Se a página atual não serve para a tarefa, comece com "navegar". Se faltar informação essencial do usuário (ex.: qual cidade, qual produto), use "perguntar".
 
@@ -316,14 +318,17 @@ function normalizeAction(o) {
   return null;
 }
 
-function fmtSnapshot(s) {
+const elKey = (e) => `${e.tag}:${e.tipo}:${e.texto}:${e.href || ""}`;
+function fmtSnapshot(s, prevKeys) {
   const els = s.elements.map((e) => {
     let ln = `[${e.i}] ${e.tag}${e.tipo ? ":" + e.tipo : ""} "${e.texto}"`;
     if (e.href) ln += ` → ${e.href}`;
-    if (e.valor) ln += ` (valor atual: "${e.valor}")`;
+    if (e.valor) ln += ` (valor: "${e.valor}")`;
+    if (e.naTela === false) ln += " (fora da tela — role p/ ver)";
+    if (prevKeys && prevKeys.size && !prevKeys.has(elKey(e))) ln += " 🆕";
     return ln;
   }).join("\n");
-  return `Página: ${s.title} — ${s.url} (vista até ${s.rolagem}% da altura)\nElementos interativos:\n${els}\nTrecho do texto: ${s.trecho}`;
+  return `Página: ${s.title} — ${s.url} (vista até ${s.rolagem}% da altura)\nElementos interativos${prevKeys && prevKeys.size ? " (🆕 = surgiu agora)" : ""}:\n${els}\nTrecho do texto: ${s.trecho}`;
 }
 
 const routeCache = new Map(); // tarefa → agente escolhido (evita chamada repetida ao orquestrador)
@@ -444,7 +449,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [];
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "";
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set();
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -473,6 +478,84 @@ async function runAgent(task) {
     const agent = sel !== "auto" ? AGENTS.find((a) => a.id === sel) : await pickAgent(task);
     box.add(`${agent.nome} assumiu a tarefa`);
 
+    const NAVEGA = ["navegar", "nova_aba", "voltar", "clicar", "tecla", "curtir"];
+    // executa UMA ação; retorna FINISH (encerra), BREAK (re-observar a página) ou NEXT (seguir no lote)
+    async function handleAct(act, snap, passo) {
+      if (act.tool === "digitar") ultimoTexto = String(act.args?.texto ?? "");
+      else if (act.tool === "preencher") ultimoTexto = (act.args?.campos || []).map((c) => c.texto).filter(Boolean).join(" | ");
+
+      if (act.tool === "concluir") { finish(act.args?.resposta); return "FINISH"; }
+
+      if (act.tool === "olhar") {
+        box.add(`${passo}. 👁️ Olhando a página (captura + visão)`);
+        statusTxt = "👁️ Analisando a captura";
+        const res = await tool("olhar", {});
+        if (res?.ok && res.out?.dataUrl) {
+          try {
+            visao = (await llmVision(res.out.dataUrl,
+              `Descreva objetivamente o que aparece nesta captura de tela de uma página web: textos visíveis, botões, campos, imagens e estado geral. Contexto da tarefa: ${task}`)).slice(0, 2500);
+            feitas.push(`olhar → descrição visual obtida (veja "O que você viu")`);
+          } catch (e) {
+            feitas.push("olhar → ERRO no modelo de visão: " + e.message);
+          }
+        } else {
+          feitas.push("olhar → ERRO: " + (res?.error || "captura falhou"));
+        }
+        statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
+        return "BREAK";
+      }
+
+      if (act.tool === "perguntar") {
+        const q = act.args?.pergunta || "Pode dar mais detalhes sobre o que você quer?";
+        box.add("❓ Perguntando ao usuário");
+        statusTxt = null;
+        status.textContent = "⏸️ Aguardando sua resposta...";
+        const ans = await askUser(q);
+        statusTxt = `${agent.nome} · retomando`;
+        feitas.push(`perguntar "${q.slice(0, 60)}" → usuário respondeu: "${ans.slice(0, 150)}"`);
+        return "BREAK";
+      }
+
+      // confirmação humana para ações sensíveis
+      const label = elLabel(snap, act.args?.i);
+      const rotuloForm = (i) => (form.match(new RegExp(`^\\[${i}\\][^"]*"([^"]*)"`, "m"))?.[1]) || elLabel(snap, i);
+      const socialEnvio = agent.id === "social" && (act.tool === "clicar" || (act.tool === "tecla" && (act.args?.tecla || "Enter") === "Enter"));
+      const sensivel = socialEnvio ||
+        ((act.tool === "clicar" || act.tool === "tecla") && SENSITIVE_CLICK.test(label)) ||
+        ((act.tool === "digitar" || act.tool === "preencher") &&
+          (act.tool === "preencher" ? (act.args?.campos || []).some((c) => SENSITIVE_FIELD.test(rotuloForm(c.i))) : SENSITIVE_FIELD.test(label)));
+      if (sensivel) {
+        statusTxt = null;
+        status.textContent = "⏸️ Aguardando sua confirmação...";
+        const descConf = socialEnvio
+          ? (ultimoTexto ? `publicar o comentário/mensagem: "${ultimoTexto.slice(0, 140)}"` : "enviar/publicar a mensagem")
+          : `${act.tool} em "${label}"`;
+        const okd = await confirmAction(descConf);
+        statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
+        if (!okd) {
+          feitas.push(`usuário NEGOU ${act.tool} em "${label}" — não tente de novo; siga outro caminho ou conclua`);
+          box.add("🚫 Ação negada por você");
+          return "BREAK";
+        }
+      }
+
+      box.add(`${passo}. ${describeAction(act, label)}`);
+      const res = await tool(act.tool, act.args || {});
+      const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
+      if (act.tool === "ler" && res?.ok) {
+        leitura = String(res.out).slice(0, 5000);
+        feitas.push(`ler → conteúdo obtido (veja acima); se já basta para a tarefa, use "concluir"`);
+      } else if (act.tool === "formulario" && res?.ok) {
+        form = String(res.out).slice(0, 3500);
+        feitas.push(`formulario → mapa obtido (veja "Mapa do formulário"); preencha o que faltar ou pergunte os dados ao usuário`);
+      } else {
+        feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
+      }
+      await sleep(250);
+      if (!res?.ok) return "BREAK";            // erro → re-observar
+      return NAVEGA.includes(act.tool) ? "BREAK" : "NEXT"; // navegação encerra o lote
+    }
+
     const maxSteps = cfg.maxSteps || 20;
     for (let passo = 1; passo <= maxSteps; passo++) {
       if (agentRun.cancel) {
@@ -484,8 +567,9 @@ async function runAgent(task) {
 
       const snapRes = await tool("snapshot", {});
       const snap = snapRes?.ok ? snapRes.out : null;
-      if (snap?.url && visited[visited.length - 1] !== snap.url) visited.push(snap.url);
-      const contexto = snap ? fmtSnapshot(snap) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
+      if (snap?.url && visited[visited.length - 1] !== snap.url) { visited.push(snap.url); prevKeys = new Set(); }
+      const contexto = snap ? fmtSnapshot(snap, prevKeys) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
+      if (snap) prevKeys = new Set(snap.elements.map(elKey));
       const anteriores = agentHistory.slice(-3).map((h) => `- "${h.task}" → ${h.resposta.slice(0, 100)}`).join("\n");
 
       // ordem pensada p/ KV-cache: partes estáveis/append-only primeiro, snapshot dinâmico por último
@@ -504,19 +588,23 @@ async function runAgent(task) {
           `\nQual a próxima ação? Responda somente o JSON.` }
       ], 1200);
 
-      const act = normalizeAction(parseAction(raw));
-      if (!act?.tool) {
+      const parsed = parseAction(raw);
+      let acts;
+      if (parsed && Array.isArray(parsed.acoes)) acts = parsed.acoes.map((a) => normalizeAction(a)).filter(Boolean);
+      else { const a = normalizeAction(parsed); acts = a ? [a] : []; }
+
+      if (!acts.length) {
         const clean = raw.replace(/<think>[\s\S]*?<\/think>/g, "").replace(/```\w*/g, "").trim();
         const m = clean.match(/"resposta"\s*:\s*"([\s\S]+)/);
         if (m) { finish(m[1].replace(/\\n/g, "\n").replace(/["}\]]*\s*$/, "")); return; }
         if (!clean.includes("{") && leitura && clean.length > 40) { finish(clean); return; }
-        feitas.push(`resposta inválida ("${clean.slice(0, 60)}...") → envie UM único objeto JSON começando com {`);
+        feitas.push(`resposta inválida ("${clean.slice(0, 60)}...") → envie UM objeto JSON começando com {`);
         box.add(`⚠️ Resposta fora do formato, pedindo de novo`);
         continue;
       }
 
-      // detecção de loop: mesma ação 3x seguidas
-      const sig = JSON.stringify(act);
+      // detecção de loop: mesmo lote 3x seguidas
+      const sig = JSON.stringify(acts);
       lastCount = sig === lastSig ? lastCount + 1 : 1;
       lastSig = sig;
       if (lastCount >= 3) {
@@ -526,79 +614,13 @@ async function runAgent(task) {
         continue;
       }
 
-      if (act.tool === "digitar") ultimoTexto = String(act.args?.texto ?? "");
-      else if (act.tool === "preencher") ultimoTexto = (act.args?.campos || []).map((c) => c.texto).filter(Boolean).join(" | ");
-
-      if (act.tool === "concluir") { finish(act.args?.resposta); return; }
-
-      if (act.tool === "olhar") {
-        box.add(`${passo}. 👁️ Olhando a página (captura + visão)`);
-        statusTxt = "👁️ Analisando a captura";
-        const res = await tool("olhar", {});
-        if (res?.ok && res.out?.dataUrl) {
-          try {
-            visao = (await llmVision(res.out.dataUrl,
-              `Descreva objetivamente o que aparece nesta captura de tela de uma página web: textos visíveis, botões, campos, imagens e estado geral. Contexto da tarefa: ${task}`)).slice(0, 2500);
-            feitas.push(`olhar → descrição visual obtida (veja "O que você viu")`);
-          } catch (e) {
-            feitas.push("olhar → ERRO no modelo de visão: " + e.message);
-          }
-        } else {
-          feitas.push("olhar → ERRO: " + (res?.error || "captura falhou"));
-        }
-        statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
-        await sleep(300);
-        continue;
+      if (acts.length > 1) box.add(`⚡ Lote de ${acts.length} ações`);
+      // executa o lote; para no 1º sinal de re-observação (navegação/erro/pausa) — evita índices obsoletos
+      for (const act of acts) {
+        const r = await handleAct(act, snap, passo);
+        if (r === "FINISH") return;
+        if (r === "BREAK") break;
       }
-
-      if (act.tool === "perguntar") {
-        const q = act.args?.pergunta || "Pode dar mais detalhes sobre o que você quer?";
-        box.add("❓ Perguntando ao usuário");
-        statusTxt = null;
-        status.textContent = "⏸️ Aguardando sua resposta...";
-        const ans = await askUser(q);
-        statusTxt = `${agent.nome} · retomando`;
-        feitas.push(`perguntar "${q.slice(0, 60)}" → usuário respondeu: "${ans.slice(0, 150)}"`);
-        continue;
-      }
-
-      // confirmação humana para ações sensíveis
-      const label = elLabel(snap, act.args?.i);
-      const rotuloForm = (i) => (form.match(new RegExp(`^\\[${i}\\][^"]*"([^"]*)"`, "m"))?.[1]) || elLabel(snap, i);
-      // no agente Social, enviar mensagem (Enter ou clique) sempre pede confirmação
-      const socialEnvio = agent.id === "social" && (act.tool === "clicar" || (act.tool === "tecla" && (act.args?.tecla || "Enter") === "Enter"));
-      const sensivel = socialEnvio ||
-        ((act.tool === "clicar" || act.tool === "tecla") && SENSITIVE_CLICK.test(label)) ||
-        ((act.tool === "digitar" || act.tool === "preencher") &&
-          (act.tool === "preencher" ? (act.args?.campos || []).some((c) => SENSITIVE_FIELD.test(rotuloForm(c.i))) : SENSITIVE_FIELD.test(label)));
-      if (sensivel) {
-        statusTxt = null;
-        status.textContent = "⏸️ Aguardando sua confirmação...";
-        const descConf = socialEnvio
-          ? (ultimoTexto ? `publicar o comentário/mensagem: "${ultimoTexto.slice(0, 140)}"` : "enviar/publicar a mensagem")
-          : `${act.tool} em "${label}"`;
-        const okd = await confirmAction(descConf);
-        statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
-        if (!okd) {
-          feitas.push(`usuário NEGOU ${act.tool} em "${label}" — não tente de novo; siga outro caminho ou conclua`);
-          box.add("🚫 Ação negada por você");
-          continue;
-        }
-      }
-
-      box.add(`${passo}. ${describeAction(act, label)}`);
-      const res = await tool(act.tool, act.args || {});
-      const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
-      if (act.tool === "ler" && res?.ok) {
-        leitura = String(res.out).slice(0, 5000);
-        feitas.push(`ler → conteúdo obtido (veja acima); se já basta para a tarefa, use "concluir"`);
-      } else if (act.tool === "formulario" && res?.ok) {
-        form = String(res.out).slice(0, 3500);
-        feitas.push(`formulario → mapa obtido (veja "Mapa do formulário"); preencha o que faltar ou pergunte os dados ao usuário`);
-      } else {
-        feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
-      }
-      await sleep(300);
     }
     statusTxt = null;
     status.textContent = `⚠️ Limite de ${maxSteps} passos atingido · ${secs()}s`;
