@@ -5,8 +5,12 @@ Assistente de IA no painel lateral do Chrome, conectado ao **Mangaba Gateway** (
 ## Funcionalidades
 - Chat no **side panel** (clique no ícone da extensão)
 - **Contexto da página**: lê título, URL e texto da aba ativa e responde sobre ela
+- **🤖 Modo agente**: equipe de agentes (Orquestrador + Navegador, Pesquisador, Leitor, Preenchedor) que executa tarefas no navegador — abre URLs, clica, digita, rola e lê páginas, decidindo passo a passo via LLM
 - **Streaming** de resposta (SSE, compatível com API estilo OpenAI)
 - Configurável: URL do gateway, modelo e API key (⚙︎ no topo)
+
+## Modo agente
+Marque **🤖 Modo agente** e peça, por exemplo: *"pesquise o preço da mangaba no Google"* ou *"abra g1.com e resuma a manchete"*. O Orquestrador escolhe o agente; ele age em até 15 passos (JSON por passo) e mostra cada ação no chat. Por segurança, os agentes nunca digitam senhas/cartões nem confirmam compras — devolvem a tarefa ao usuário nesses casos.
 
 ## Instalação
 1. Abra `chrome://extensions`

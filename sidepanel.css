@@ -46,7 +46,12 @@ main {
 .msg.assistant { align-self: flex-start; background: #fff; border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
 .msg.err { align-self: center; background: #FDE8E8; color: #9B1C1C; font-size: 12px; }
 footer { padding: 10px 12px; background: #fff; border-top: 1px solid var(--borda); }
-.ctx { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 8px; }
+.ctxrow { display: flex; gap: 14px; margin-bottom: 8px; }
+.ctx { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.msg.step {
+  align-self: flex-start; background: transparent; border: 1px dashed var(--borda);
+  color: #7A6A5C; font-size: 12px; padding: 5px 10px;
+}
 .inputrow { display: flex; gap: 8px; }
 textarea {
   flex: 1; resize: none; padding: 8px 10px; font: inherit;

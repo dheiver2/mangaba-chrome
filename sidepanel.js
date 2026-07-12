@@ -3,6 +3,7 @@ const chat = $("chat");
 const input = $("input");
 const btnSend = $("btnSend");
 const history = []; // {role, content}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const DEFAULTS = {
   url: "http://localhost:8080/v1/chat/completions",
@@ -38,6 +39,114 @@ function addMsg(cls, text) {
   return div;
 }
 
+function gatewayHeaders() {
+  const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "1" };
+  if (cfg.key) headers.Authorization = "Bearer " + cfg.key;
+  return headers;
+}
+
+async function ensureModel(headers) {
+  if (cfg.model) return;
+  // sem modelo configurado: usa o primeiro que o gateway listar
+  const mResp = await fetch(cfg.url.replace(/\/chat\/completions\/?$/, "/models"), { headers });
+  const first = (await mResp.json()).data?.[0]?.id;
+  if (!first) throw new Error("configure o modelo no ⚙︎ (GET /v1/models não retornou nada)");
+  cfg.model = first;
+  chrome.storage.sync.set({ model: first });
+  $("cfgModel").value = first;
+}
+
+// chamada não-streaming (usada pelos agentes)
+async function llm(messages, maxTokens = 700) {
+  const headers = gatewayHeaders();
+  await ensureModel(headers);
+  const resp = await fetch(cfg.url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0 })
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+  return (await resp.json()).choices?.[0]?.message?.content || "";
+}
+
+// ---------- MODO AGENTE ----------
+const AGENTS = [
+  { id: "navegador",   nome: "🧭 Navegador",   desc: "abre sites, clica em links e botões, navega entre páginas" },
+  { id: "pesquisador", nome: "🔎 Pesquisador", desc: "pesquisa na web (Google/DuckDuckGo) e coleta informações de resultados" },
+  { id: "leitor",      nome: "📖 Leitor",      desc: "lê, resume e extrai dados do conteúdo de páginas" },
+  { id: "preenchedor", nome: "📝 Preenchedor", desc: "preenche campos de formulários e caixas de busca" }
+];
+
+const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por vez, sem nenhum texto fora do JSON):
+{"tool":"navegar","args":{"url":"https://..."}} — abrir uma URL na aba atual
+{"tool":"clicar","args":{"i":N}} — clicar no elemento de índice [N]
+{"tool":"digitar","args":{"i":N,"texto":"..."}} — escrever no campo [N]
+{"tool":"tecla","args":{"i":N,"tecla":"Enter"}} — pressionar Enter no campo [N] (envia buscas/formulários)
+{"tool":"rolar","args":{"dir":"baixo"}} — rolar a página ("baixo" ou "cima")
+{"tool":"ler","args":{}} — obter o texto completo da página atual
+{"tool":"concluir","args":{"resposta":"..."}} — terminar a tarefa e responder ao usuário em PT-BR
+
+Dicas: só use "clicar"/"digitar" em índices [N] que existam na lista de elementos. Para pesquisar na web, navegue direto para https://duckduckgo.com/html/?q=SUA+BUSCA e depois use "ler". Se a página atual não serve para a tarefa, comece com "navegar".
+
+Regras de segurança: NUNCA digite senhas, dados de cartão ou documentos; NUNCA confirme compras, pagamentos ou exclusões. Nesses casos use "concluir" pedindo que o usuário faça essa parte manualmente.`;
+
+function agentSystem(agent) {
+  return `Você é ${agent.nome}, agente da equipe Mangaba AI especializado em: ${agent.desc}. Você controla o navegador do usuário passo a passo para cumprir a tarefa pedida.\n\n${TOOLS_DOC}`;
+}
+
+function parseAction(raw) {
+  const clean = raw.replace(/<think>[\s\S]*?<\/think>/g, "");
+  const a = clean.indexOf("{"), b = clean.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  try { return JSON.parse(clean.slice(a, b + 1)); } catch { return null; }
+}
+
+const tool = (t, args) => chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args });
+
+function fmtSnapshot(s) {
+  const els = s.elements.map((e) => `[${e.i}] ${e.tag}${e.tipo ? ":" + e.tipo : ""} "${e.texto}"`).join("\n");
+  return `Página: ${s.title} — ${s.url}\nElementos interativos:\n${els}\nTrecho do texto: ${s.trecho}`;
+}
+
+async function pickAgent(task) {
+  const lista = AGENTS.map((a) => `${a.id}: ${a.desc}`).join("\n");
+  const raw = await llm([
+    { role: "system", content: "Você é o Orquestrador da equipe Mangaba AI. Escolha o agente mais adequado para a tarefa. Responda SOMENTE com JSON no formato {\"agente\":\"id\"}." },
+    { role: "user", content: `Agentes:\n${lista}\n\nTarefa: ${task}` }
+  ], 60);
+  const id = parseAction(raw)?.agente;
+  return AGENTS.find((a) => a.id === id) || AGENTS[0];
+}
+
+async function runAgent(task) {
+  addMsg("step", "🧠 Orquestrador escolhendo o agente...");
+  const agent = await pickAgent(task);
+  addMsg("step", `${agent.nome} assumiu a tarefa`);
+
+  const feitas = [];
+  for (let passo = 1; passo <= 15; passo++) {
+    const snapRes = await tool("snapshot", {});
+    const contexto = snapRes?.ok ? fmtSnapshot(snapRes.out) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
+    const raw = await llm([
+      { role: "system", content: agentSystem(agent) },
+      { role: "user", content: `Tarefa do usuário: ${task}\n\n${contexto}\n\nAções já executadas:\n${feitas.length ? feitas.map((f, i) => `${i + 1}. ${f}`).join("\n") : "(nenhuma)"}\n\nQual a próxima ação? Responda somente o JSON.` }
+    ]);
+    const act = parseAction(raw);
+    if (!act?.tool) { addMsg("err", "Resposta inválida do modelo: " + raw.slice(0, 120)); return; }
+    if (act.tool === "concluir") {
+      addMsg("assistant", act.args?.resposta || "Tarefa concluída.");
+      return;
+    }
+    addMsg("step", `${passo}. ${act.tool} ${JSON.stringify(act.args || {})}`);
+    const res = await tool(act.tool, act.args || {});
+    const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
+    feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
+    await sleep(400);
+  }
+  addMsg("err", "Limite de 15 passos atingido sem concluir. Refine o pedido.");
+}
+
+// ---------- CHAT ----------
 async function getPageContext() {
   const res = await chrome.runtime.sendMessage({ type: "GET_PAGE_CONTEXT" });
   if (!res?.ok) return null;
@@ -52,35 +161,30 @@ async function send() {
   btnSend.disabled = true;
   addMsg("user", question);
 
-  const messages = [{
-    role: "system",
-    content: "Você é a Mangaba, assistente de IA brasileira. Responda em português do Brasil, de forma clara e objetiva."
-  }];
-  if ($("usePage").checked) {
-    const ctx = await getPageContext();
-    if (ctx) messages.push({ role: "system", content: ctx });
-  }
-  messages.push(...history, { role: "user", content: question });
-
-  const bubble = addMsg("assistant", "…");
   try {
-    const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "1" };
-    if (cfg.key) headers.Authorization = "Bearer " + cfg.key;
-    if (!cfg.model) {
-      // sem modelo configurado: usa o primeiro que o gateway listar
-      const mResp = await fetch(cfg.url.replace(/\/chat\/completions\/?$/, "/models"), { headers });
-      const first = (await mResp.json()).data?.[0]?.id;
-      if (!first) throw new Error("configure o modelo no ⚙︎ (GET /v1/models não retornou nada)");
-      cfg.model = first;
-      chrome.storage.sync.set({ model: first });
-      $("cfgModel").value = first;
+    if ($("agentMode").checked) {
+      await runAgent(question);
+      return;
     }
+    const messages = [{
+      role: "system",
+      content: "Você é a Mangaba, assistente de IA brasileira. Responda em português do Brasil, de forma clara e objetiva."
+    }];
+    if ($("usePage").checked) {
+      const ctx = await getPageContext();
+      if (ctx) messages.push({ role: "system", content: ctx });
+    }
+    messages.push(...history, { role: "user", content: question });
+
+    const bubble = addMsg("assistant", "…");
+    const headers = gatewayHeaders();
+    await ensureModel(headers);
     const resp = await fetch(cfg.url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ model: cfg.model || undefined, messages, stream: true })
+      body: JSON.stringify({ model: cfg.model, messages, stream: true })
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`);
+    if (!resp.ok) { bubble.remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
 
     let answer = "";
     if (resp.headers.get("content-type")?.includes("event-stream")) {
@@ -109,8 +213,7 @@ async function send() {
     }
     history.push({ role: "user", content: question }, { role: "assistant", content: answer });
   } catch (e) {
-    bubble.remove();
-    addMsg("err", "Erro ao falar com o gateway: " + e.message);
+    addMsg("err", "Erro: " + e.message);
   } finally {
     btnSend.disabled = false;
     input.focus();
