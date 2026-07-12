@@ -510,17 +510,19 @@ async function runAgent(task) {
     const nums = (task.match(/\b\d{1,3}\b/g) || []).map(Number);
     const meta = nums.length ? Math.min(50, Math.max(...nums)) : 0;
 
-    // plano curto antes de agir (decompõe tarefas em lista)
+    // só planeja tarefas realmente complexas (várias etapas/itens). Tarefa curta vai direto
+    // pro agente — evita o planejador ALUCINAR um fluxo que o usuário não pediu.
+    const palavras = task.trim().split(/\s+/).length;
+    const precisaPlano = meta >= 2 || palavras >= 12;
     let plano = [];
-    try {
+    if (precisaPlano) try {
       const p = parseAction(await llm([
-        { role: "system", content: 'Você é o planejador da equipe Mangaba AI. Gere um plano CURTO (2 a 5 passos), cada passo uma STRING de uma frase. Se a tarefa tiver vários itens (ex.: "10 perfis"), inclua um passo "repetir para cada um dos N". Responda SOMENTE com JSON onde cada passo é texto simples: {"plano":["passo 1","passo 2"]}' },
+        { role: "system", content: 'Você é o planejador da Mangaba AI. Gere um plano CURTO e REALISTA (2 a 4 passos) usando SÓ o que a tarefa literalmente pede. NUNCA invente etapas, cadastros, convites ou contas que o usuário não mencionou. Se a tarefa for ambígua/incompleta, o plano deve ser exatamente ["perguntar ao usuário o que ele quer"]. Se tiver vários itens (ex.: "10 perfis"), inclua "repetir para cada um dos N". Cada passo é uma STRING. Responda SOMENTE JSON: {"plano":["passo 1"]}' },
         { role: "user", content: task }
       ], 250));
-      // achata qualquer estrutura (o modelo às vezes devolve objetos aninhados em vez de strings)
       const achata = (x) => Array.isArray(x) ? x.flatMap(achata)
         : (x && typeof x === "object") ? Object.values(x).flatMap(achata) : [String(x)];
-      if (p?.plano) plano = achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6);
+      if (p?.plano) plano = achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4);
     } catch { /* plano é opcional */ }
     if (plano.length) box.add("🗺️ Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
     if (meta >= 2) box.add(`🎯 Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mangaba AI",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "description": "Assistente brasileira no navegador: chat com contexto da página e agentes de IA que navegam, pesquisam e preenchem por você.",
   "icons": {
     "16": "icons/icon16.png",
