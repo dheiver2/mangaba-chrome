@@ -588,7 +588,7 @@ async function runAgent(task) {
     if (meta >= 2) box.add(`🎯 Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
 
     // agente: manual (dropdown) ou orquestrador
-    const sel = $("agentSel").value;
+    const sel = $("agentSel")?.value || "auto";
     const agent = sel !== "auto" ? (AGENTS.find((a) => a.id === sel) || UNIFIED) : UNIFIED;
     box.add(`${agent.nome} assumiu a tarefa`);
 
@@ -847,6 +847,18 @@ async function runAgent(task) {
   }
 }
 
+// decide automaticamente se o pedido é AÇÃO (usa agente) ou PERGUNTA (chat com contexto)
+function precisaAgente(task) {
+  const t = task.toLowerCase().trim();
+  // começa com palavra de pergunta/leitura → é chat, mesmo que cite um verbo de ação
+  if (/^(o que|que |qual|quais|quem|como |por que|porqu|quando|onde|quant|explique?|explica|resum|traduz|defina|defini|o significado|significa|me diga|diga-me|voc[êe] (sabe|acha|pode explicar))/.test(t)) return false;
+  // verbos de ação no navegador → agente (casa o início do verbo, cobrindo conjugações: coment→comente, curt→curta...)
+  if (/\b(abr|acess|naveg|cliqu|clica|coment|curt|pesquis|busqu|busca|procur|preench|selecion|marqu|inscrev|assin|publi|postar|post[ae]|envi[ae]|enviar|respond|fa[çc]a login|login|logar|baix|extrai|coloqu|adicion|digit|escrev|v[áa] (para|at[ée]|no|na|ao))/.test(t)) return true;
+  // URL/domínio/plataforma citada → agente
+  if (/https?:\/\/|www\.|\b[\w-]+\.(com|br|net|org|io|tv)\b|youtube|instagram|gmail|twitter|\bx\.com|linkedin|whatsapp|facebook/.test(t)) return true;
+  return false; // padrão: chat (responder com o contexto da página)
+}
+
 // ---------- CHAT ----------
 let pageCtxCache = null; // {t, ctx} — evita reextrair a página em perguntas seguidas
 async function getPageContext() {
@@ -879,7 +891,8 @@ async function send() {
   addMsg("user", question);
 
   try {
-    if ($("agentMode").checked) {
+    // decide sozinho: pedido de AÇÃO → agente; PERGUNTA → chat com contexto da página
+    if (precisaAgente(question)) {
       await runAgent(question);
       return;
     }
@@ -888,10 +901,8 @@ async function send() {
       role: "system",
       content: "Você é a Mangaba, assistente de IA brasileira. Responda em português do Brasil, de forma clara e objetiva. Use Markdown quando ajudar na leitura."
     }];
-    if ($("usePage").checked) {
-      const ctx = await getPageContext();
-      if (ctx) messages.push({ role: "system", content: ctx });
-    }
+    const ctx = await getPageContext(); // sempre usa o contexto da página no chat
+    if (ctx) messages.push({ role: "system", content: ctx });
     messages.push(...history, { role: "user", content: question });
 
     const bubble = addMsg("assistant", "…");

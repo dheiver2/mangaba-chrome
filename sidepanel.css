@@ -122,6 +122,7 @@ footer { padding: 10px 12px; background: var(--creme); border-top: 1px solid var
 .ctx { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .ctx input { accent-color: var(--laranja); }
 .inputrow { display: flex; gap: 8px; }
+.hint { font-size: 11px; color: var(--suave, #A28D77); text-align: center; margin-top: 6px; }
 textarea {
   flex: 1; resize: none; padding: 8px 10px; font: inherit;
   background: #fff; border: 1px solid var(--borda); border-radius: 10px;

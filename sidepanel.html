@@ -27,21 +27,9 @@
   <label>Meus dados (chave: valor — use como {{chave}}; nunca vão ao modelo)
     <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
   </label>
-  <button id="btnSave">Salvar</button>
-</div>
-
-<main id="chat">
-  <div class="arow"><img class="avatar" src="icons/mark.png" alt="">
-    <div class="msg assistant"><p>Olá! Sou a <b>Mangaba</b>. Posso ler a página atual, responder perguntas sobre ela e, no <b>modo agente</b>, executar tarefas no navegador por você.</p></div>
-  </div>
-</main>
-
-<footer>
-  <div class="ctxrow">
-    <label class="ctx"><input type="checkbox" id="usePage" checked> Contexto da página</label>
-    <label class="ctx"><input type="checkbox" id="agentMode"> 🤖 Modo agente</label>
-    <select id="agentSel" title="Deixe em Automático — a Mangaba escolhe tudo sozinha. Os demais são forçar um modo específico (avançado).">
-      <option value="auto">🥭 Automático</option>
+  <label>Modo do agente (avançado — deixe em Automático)
+    <select id="agentSel">
+      <option value="auto">🥭 Automático (faz tudo)</option>
       <option value="navegador">🧭 Navegador</option>
       <option value="pesquisador">🔎 Pesquisador</option>
       <option value="leitor">📖 Leitor</option>
@@ -49,11 +37,22 @@
       <option value="social">💬 Social</option>
       <option value="acesso">🔐 Acesso</option>
     </select>
+  </label>
+  <button id="btnSave">Salvar</button>
+</div>
+
+<main id="chat">
+  <div class="arow"><img class="avatar" src="icons/mark.png" alt="">
+    <div class="msg assistant"><p>Olá! Sou a <b>Mangaba</b>. Pergunte sobre esta página ou peça uma tarefa (ex.: <i>"resuma isto"</i>, <i>"comente no primeiro vídeo"</i>) — eu entendo sozinha o que fazer.</p></div>
   </div>
+</main>
+
+<footer>
   <div class="inputrow">
-    <textarea id="input" rows="2" placeholder="Pergunte algo..."></textarea>
+    <textarea id="input" rows="2" placeholder="Pergunte ou peça uma tarefa..."></textarea>
     <button id="btnSend">➤</button>
   </div>
+  <div class="hint">A Mangaba entende sozinha se é pergunta ou tarefa.</div>
 </footer>
 
 <script src="sidepanel.js"></script>
