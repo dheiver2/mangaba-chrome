@@ -57,6 +57,100 @@ const snapshotFn = () => {
     trecho: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 1200)
   };
 };
+// Mapa detalhado do formulário. Usa o MESMO percurso do snapshot para que os
+// índices [i] sejam consistentes entre snapshot/formulario/clicar/preencher.
+const formFn = () => {
+  const vis = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  const SEL = 'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
+  const els = [];
+  let varridos = 0;
+  const walk = (root) => {
+    if (!root || els.length >= 90 || varridos > 4000) return;
+    for (const el of root.querySelectorAll(SEL)) {
+      if (els.length >= 90) break;
+      if (vis(el)) els.push(el);
+    }
+    for (const el of root.querySelectorAll("*")) {
+      if (els.length >= 90 || ++varridos > 4000) break;
+      if (el.shadowRoot) walk(el.shadowRoot);
+      else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
+    }
+  };
+  walk(document);
+  window.__mgbEls = els;
+  const rotulo = (el) => {
+    if (el.id) { const l = document.querySelector(`label[for="${CSS.escape(el.id)}"]`); if (l) return l.innerText; }
+    const p = el.closest("label");
+    if (p) return p.innerText;
+    return el.getAttribute("aria-label") || el.placeholder || el.name || "";
+  };
+  const linhas = [];
+  els.forEach((el, i) => {
+    const t = el.tagName.toLowerCase();
+    const ehCampo = t === "input" || t === "select" || t === "textarea" || el.isContentEditable;
+    const ehEnvio = (t === "button" && (el.type === "submit" || !el.type)) || (t === "input" && el.type === "submit");
+    if (!ehCampo && !ehEnvio) return;
+    const nome = (rotulo(el) || el.innerText || "").trim().replace(/\s+/g, " ").slice(0, 60);
+    const base = `[${i}] ${t}${el.type ? ":" + el.type : ""} "${nome}"`;
+    if (ehEnvio) { linhas.push(`${base} (botão de envio)`); return; }
+    if (t === "select") {
+      const ops = [...el.options].map((o) => o.text.trim().slice(0, 30)).slice(0, 12).join(" | ");
+      linhas.push(`${base} opções: ${ops} (selecionado: "${el.options[el.selectedIndex]?.text?.trim() || ""}")`);
+    } else if (el.type === "checkbox" || el.type === "radio") {
+      linhas.push(`${base} ${el.checked ? "[x]" : "[ ]"} valor:${String(el.value).slice(0, 20)}`);
+    } else if (el.type === "password") {
+      linhas.push(`${base} (SENHA — não preencher; o usuário digita)`);
+    } else {
+      linhas.push(`${base} valor atual: "${String(el.value || "").slice(0, 40)}"${el.required ? " *obrigatório" : ""}`);
+    }
+  });
+  return linhas.length ? linhas.join("\n") : "(nenhum campo de formulário visível nesta página)";
+};
+const preencherFn = (campos) => {
+  const res = [];
+  for (const c of campos || []) {
+    const el = (window.__mgbEls || [])[c.i];
+    if (!el) { res.push(`[${c.i}] não encontrado`); continue; }
+    if (el.type === "password") { res.push(`[${c.i}] recusado: campo de senha`); continue; }
+    const o = el.style.outline;
+    el.style.outline = "3px solid #F0781E";
+    setTimeout(() => (el.style.outline = o), 900);
+    el.focus();
+    if (el.isContentEditable) el.textContent = String(c.texto ?? "");
+    else {
+      const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const set = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      set ? set.call(el, String(c.texto ?? "")) : (el.value = String(c.texto ?? ""));
+    }
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    const valido = el.checkValidity ? el.checkValidity() : true;
+    res.push(`[${c.i}] preenchido${valido ? "" : " (o site marcou como INVÁLIDO: " + (el.validationMessage || "").slice(0, 60) + ")"}`);
+  }
+  return res.join("; ");
+};
+const selecionarFn = (i, opcao) => {
+  const el = (window.__mgbEls || [])[i];
+  if (!el || el.tagName !== "SELECT") return "[" + i + "] não é um dropdown (select)";
+  const alvo = String(opcao).toLowerCase().trim();
+  const idx = [...el.options].findIndex((o) =>
+    o.value.toLowerCase() === alvo || o.text.toLowerCase().trim() === alvo || o.text.toLowerCase().includes(alvo));
+  if (idx < 0) return `opção "${opcao}" não encontrada em [${i}]`;
+  el.selectedIndex = idx;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return `selecionei "${el.options[idx].text.trim()}" em [${i}]`;
+};
+const marcarFn = (i, valor) => {
+  const el = (window.__mgbEls || [])[i];
+  if (!el || (el.type !== "checkbox" && el.type !== "radio")) return "[" + i + "] não é checkbox/radio";
+  const querer = valor !== false;
+  if (el.checked !== querer) el.click(); // click dispara os eventos que frameworks esperam
+  return (querer ? "marquei" : "desmarquei") + " [" + i + "]";
+};
 const flashFn = (el) => {
   const o = el.style.outline;
   el.style.outline = "3px solid #F0781E";
@@ -162,6 +256,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       } else {
         const tab = await getTab();
         if (tool === "snapshot") out = await exec(tab.id, snapshotFn);
+        else if (tool === "formulario") out = await exec(tab.id, formFn);
+        else if (tool === "preencher") out = await exec(tab.id, preencherFn, [args.campos || []]);
+        else if (tool === "selecionar") out = await exec(tab.id, selecionarFn, [args.i, String(args.opcao ?? "")]);
+        else if (tool === "marcar") out = await exec(tab.id, marcarFn, [args.i, args.valor]);
         else if (tool === "clicar") {
           out = await exec(tab.id, clickFn, [args.i]);
           await sleep(800); await waitLoad(tab.id, 6000);
