@@ -150,7 +150,7 @@ async function ensureModel(headers) {
     modelsCache = { t: Date.now(), data: (await mResp.json()).data || [] };
   }
   const first = modelsCache.data[0]?.id;
-  if (!first) throw new Error("configure o modelo nas ConfiguraÃ§Ãµes (GET /v1/models não retornou nada)");
+  if (!first) throw new Error("configure o modelo nas Configurações (GET /v1/models não retornou nada)");
   cfg.model = first;
   if (chrome.storage?.sync) chrome.storage.sync.set({ model: first });
   $("cfgModel").value = first;
@@ -680,8 +680,10 @@ async function runAgent(task) {
       const label = elLabel(snap, act.args?.i);
       const rotuloForm = (i) => (form.match(new RegExp(`^\\[${i}\\][^"]*"([^"]*)"`, "m"))?.[1]) || elLabel(snap, i);
       // envio de mensagem/comentário detectado pela AÇÃO+rótulo (não pelo agente) — publicar sempre confirma
-      const ehEnvioMsg = (act.tool === "clicar" || (act.tool === "tecla" && (act.args?.tecla || "Enter") === "Enter"))
-        && /coment|responder|reply|publicar|postar|tweet|mensagem|message|enviar|\bsend\b|adicione/i.test(label);
+      // só é ENVIO se já houver texto digitado — abrir/ativar o campo ("Adicionar um comentário") não deve pedir confirmação
+      const ehEnvioMsg = !!ultimoTexto
+        && (act.tool === "clicar" || (act.tool === "tecla" && (act.args?.tecla || "Enter") === "Enter"))
+        && /coment|responder|reply|publicar|postar|tweet|mensagem|message|enviar|\bsend\b/i.test(label);
       const sensivel = ehEnvioMsg ||
         ((act.tool === "clicar" || act.tool === "tecla") && SENSITIVE_CLICK.test(label)) ||
         ((act.tool === "digitar" || act.tool === "preencher") &&
@@ -770,7 +772,11 @@ async function runAgent(task) {
         snapRes = await tool("snapshot", {});
         snap = snapRes?.ok ? snapRes.out : snap;
       }
-      if (snap?.url && visited[visited.length - 1] !== snap.url) { visited.push(snap.url); prevKeys = new Set(); }
+      if (snap?.url && visited[visited.length - 1] !== snap.url) {
+        visited.push(snap.url); prevKeys = new Set();
+        // mudou de página: o conteúdo lido/mapeado/visto era da página ANTERIOR — descarta p/ não induzir o modelo com dado velho
+        leitura = ""; form = ""; visao = ""; leuAlguma = false; rolares = 0;
+      }
       const contexto = snap ? fmtSnapshot(snap, prevKeys) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
       if (snap) prevKeys = new Set(snap.elements.map(elKey));
       // AUTO-RECUPERAÇÃO: se a última ação de navegação não mudou nada, avisa o modelo p/ tentar outro caminho
@@ -821,7 +827,7 @@ async function runAgent(task) {
         if (invalidos >= 4) {
           statusTxt = null;
           status.textContent = `Modelo não retornou ações válidas · ${secs()}s`;
-          addMsg("err", `O modelo respondeu fora do formato JSON ${invalidos}× seguidas (última: "${clean.slice(0, 120) || "vazia"}"). Tente um modelo maior nas ConfiguraÃ§Ãµes (ex.: mangaba-pro ou mangaba-max) — os menores erram a sintaxe do JSON.`);
+          addMsg("err", `O modelo respondeu fora do formato JSON ${invalidos}× seguidas (última: "${clean.slice(0, 120) || "vazia"}"). Tente um modelo maior nas Configurações (ex.: mangaba-pro ou mangaba-max) — os menores erram a sintaxe do JSON.`);
           return;
         }
         continue;
@@ -837,7 +843,7 @@ async function runAgent(task) {
         if (avisosLoop >= 2) {
           statusTxt = null;
           status.textContent = `Preso em repetição · ${box.n} passos · ${secs()}s`;
-          addMsg("err", "O agente ficou repetindo a mesma ação sem progredir. Tente um modelo maior nas ConfiguraÃ§Ãµes (mangaba-pro/max) ou reformule o pedido.");
+          addMsg("err", "O agente ficou repetindo a mesma ação sem progredir. Tente um modelo maior nas Configurações (mangaba-pro/max) ou reformule o pedido.");
           return;
         }
         feitas.push("ATENÇÃO: você repetiu a mesma ação sem progresso; MUDE de estratégia AGORA ou use \"concluir\".");
@@ -870,7 +876,7 @@ async function runAgent(task) {
     }
     statusTxt = null;
     status.textContent = `Limite de ${maxSteps} passos atingido · ${secs()}s`;
-    addMsg("err", "Não concluí dentro do limite de passos. Refine o pedido ou aumente o limite nas ConfiguraÃ§Ãµes.");
+    addMsg("err", "Não concluí dentro do limite de passos. Refine o pedido ou aumente o limite nas Configurações.");
   } catch (e) {
     statusTxt = null;
     if (agentRun?.cancel || e.name === "AbortError") {
@@ -943,7 +949,7 @@ async function send() {
     }];
     const ctx = await getPageContext(); // sempre usa o contexto da página no chat
     if (ctx) messages.push({ role: "system", content: ctx });
-    messages.push(...history, { role: "user", content: question });
+    messages.push(...history.slice(-12), { role: "user", content: question }); // só as últimas trocas: o histórico não pode crescer sem limite (estoura o contexto do GGUF local)
 
     const bubble = addMsg("assistant", "…");
     const headers = gatewayHeaders();
