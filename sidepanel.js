@@ -208,7 +208,11 @@ const AGENTS = [
   { id: "leitor",      nome: "Leitor",      desc: "lê, resume e extrai dados do conteúdo de páginas" },
   { id: "preenchedor", nome: "Preenchedor", desc: "especialista em formulários: cadastros, inscrições, contato, checkout — mapeia, preenche, seleciona opções e marca caixas" },
   { id: "social",      nome: "Social",      desc: "lê caixas de entrada e DMs em redes sociais (WhatsApp Web, Instagram, X, LinkedIn, Messenger, e-mail) e redige respostas" },
-  { id: "acesso",      nome: "Acesso",      desc: "abre a tela de login de plataformas e conduz o acesso — sem nunca digitar sua senha" }
+  { id: "acesso",      nome: "Acesso",      desc: "abre a tela de login de plataformas e conduz o acesso — sem nunca digitar sua senha" },
+  { id: "extrator",    nome: "Extrator",    desc: "raspa listas e tabelas de páginas (preços, resultados, imóveis, vagas) e entrega em tabela Markdown limpa" },
+  { id: "painel",      nome: "Painel",      desc: "entra em dashboards/painéis, navega até o relatório, espera carregar e extrai os números" },
+  { id: "monitor",     nome: "Monitor",     desc: "checa um trecho específico de uma página (preço, estoque, status) e relata se mudou em relação ao combinado" },
+  { id: "comparador",  nome: "Comparador",  desc: "abre 2–3 fontes, extrai o mesmo dado de cada e monta um comparativo lado a lado" }
 ];
 
 const PESQUISADOR_FLUXO = `
@@ -249,7 +253,44 @@ FLUXO DE LEITURA (siga à risca):
 2. Se a página for muito longa, use "ler" com "offset" para pegar a continuação.
 3. Assim que tiver o conteúdo, use "concluir" com a resposta/resumo em Markdown. Não fique rolando.`;
 
-const FLUXOS = { pesquisador: PESQUISADOR_FLUXO, social: SOCIAL_FLUXO, acesso: LOGIN_FLUXO, leitor: LEITOR_FLUXO };
+const EXTRATOR_FLUXO = `
+
+FLUXO DE EXTRAÇÃO DE DADOS/TABELA (siga à risca):
+1. Se a lista/tabela não estiver toda visível, use "rolar_fim" 1–2 vezes para disparar o carregamento preguiçoso (lazy-load) e então "ler".
+2. Use "extrair" dizendo EXATAMENTE quais colunas quer (ex.: "nome, preço e link de cada produto").
+3. Se houver paginação e a tarefa pedir mais itens, clique em "Próxima"/">" com "clicar_texto" e repita, acumulando os itens (conte o progresso).
+4. NUNCA invente valores: se um campo faltar num item, deixe a célula vazia.
+5. No "concluir", entregue UMA tabela Markdown (| coluna | coluna |), uma linha por item, e diga quantos itens foram extraídos.`;
+
+const PAINEL_FLUXO = `
+
+FLUXO DE RELATÓRIO EM PAINEL/DASHBOARD:
+1. Navegue até o painel. Se cair no login, preencha o usuário se souber e use "perguntar" para o usuário concluir o acesso — NUNCA digite senha. Se aparecer CAPTCHA, a tarefa pausa para o usuário resolver.
+2. Vá até a seção/relatório pedido ("clicar_texto" no nome do menu/aba).
+3. Painéis carregam de forma assíncrona: use "esperar_por" com um texto que só aparece quando os dados chegam (ex.: "Total", o nome de uma métrica) ANTES de ler.
+4. Use "ler" ou "extrair" para pegar os números pedidos.
+5. Se houver botão de exportar (CSV/Excel), oriente o usuário a baixar — download de arquivo é feito por ele.
+6. No "concluir", resuma os números em tabela/lista Markdown, citando o período/filtro que estava aplicado.`;
+
+const MONITOR_FLUXO = `
+
+FLUXO DE MONITORAMENTO DE MUDANÇA:
+1. Navegue até a página exata a monitorar.
+2. Use "esperar_por" (ou "rolar_ate") para garantir que o trecho de interesse carregou.
+3. Use "extrair" pedindo SÓ o valor a monitorar (ex.: "o preço atual", "o status do pedido").
+4. Compare com o valor de referência que o usuário deu. Se ele não deu um, apenas relate o valor atual e pergunte qual é o esperado.
+5. No "concluir", diga claramente: valor ATUAL, se MUDOU ou não em relação ao esperado, e a diferença. Seja factual; não infira tendências.`;
+
+const COMPARADOR_FLUXO = `
+
+FLUXO DE COMPARAÇÃO ENTRE FONTES:
+1. Trabalhe UMA fonte por vez: abra o primeiro site (ou busca), encontre o item e use "ler"/"extrair" para pegar o dado pedido (ex.: preço, nota, prazo).
+2. Vá para a próxima fonte ("nova_aba" ou "navegar") e repita, mantendo a contagem (ex.: "2/3 fontes").
+3. Use SÓ dados que você realmente leu de cada fonte — nunca invente para completar a tabela; se não achou numa fonte, marque "não encontrado".
+4. No "concluir", entregue UMA tabela Markdown comparativa (uma linha por fonte) e uma frase dizendo qual é a melhor opção segundo o critério pedido.`;
+
+const FLUXOS = { pesquisador: PESQUISADOR_FLUXO, social: SOCIAL_FLUXO, acesso: LOGIN_FLUXO, leitor: LEITOR_FLUXO,
+  extrator: EXTRATOR_FLUXO, painel: PAINEL_FLUXO, monitor: MONITOR_FLUXO, comparador: COMPARADOR_FLUXO };
 
 // Agente ÚNICO (padrão): faz tudo, sem o usuário precisar escolher especialidade.
 const UNIFIED = { id: "mangaba", nome: "Mangaba", desc: "assistente completa que navega, pesquisa, lê, preenche formulários, interage em redes sociais e conduz login" };
