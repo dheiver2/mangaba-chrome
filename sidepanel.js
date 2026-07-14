@@ -275,9 +275,15 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"navegar","args":{"url":"https://..."}} — abrir uma URL na aba atual
 {"tool":"nova_aba","args":{"url":"https://..."}} — abrir uma URL em nova aba
 {"tool":"voltar","args":{}} — voltar à página anterior
+{"tool":"avancar","args":{}} — avançar para a próxima página do histórico
+{"tool":"recarregar","args":{}} — recarregar a página atual (útil quando travou ou não carregou direito)
+{"tool":"fechar_aba","args":{"id":N}} — fechar a aba de id [N] (use listar_abas para ver os ids)
 {"tool":"clicar","args":{"i":N}} — clicar no elemento de índice [N]
+{"tool":"clicar_texto","args":{"texto":"Entrar"}} — clicar no elemento clicável cujo texto visível corresponde (use quando não souber o índice ou ele mudar)
 {"tool":"digitar","args":{"i":N,"texto":"..."}} — escrever no campo [N]
+{"tool":"limpar","args":{"i":N}} — esvaziar o campo [N] antes de digitar um valor novo
 {"tool":"tecla","args":{"i":N,"tecla":"Enter"}} — pressionar Enter no campo [N] (envia buscas/formulários)
+{"tool":"hover","args":{"i":N}} — passar o mouse sobre [N] para revelar menus suspensos/tooltips
 {"tool":"formulario","args":{}} — mapear os campos do formulário da página (rótulos, tipos, opções, obrigatórios, valores)
 {"tool":"preencher","args":{"campos":[{"i":N,"texto":"..."},{"i":M,"texto":"..."}]}} — preencher vários campos de texto de uma vez
 {"tool":"selecionar","args":{"i":N,"opcao":"texto ou valor da opção"}} — escolher opção em dropdown (select)
@@ -285,9 +291,13 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"curtir","args":{"i":N}} — curtir/dar like no botão de like/coração [N] (redes sociais)
 {"tool":"rolar","args":{"dir":"baixo"}} — rolar a página ("baixo" ou "cima")
 {"tool":"rolar_ate","args":{"texto":"comentários"}} — rolar até o trecho que contém esse texto (útil p/ chegar em seções fora da tela)
+{"tool":"rolar_fim","args":{}} — rolar até o fim da página (dispara o carregamento preguiçoso de feeds/listas longas)
 {"tool":"extrair","args":{"o_que":"títulos e canais dos 5 primeiros vídeos"}} — extrair dados específicos do texto da página, de forma estruturada
 {"tool":"ler","args":{"offset":0}} — obter TODO o texto da página de uma vez (NÃO precisa rolar antes; use offset só para continuar páginas muito longas)
+{"tool":"links","args":{}} — listar os links visíveis (texto → URL) para escolher um resultado ou navegar
 {"tool":"esperar","args":{"segundos":2}} — aguardar a página carregar (1 a 10s)
+{"tool":"esperar_por","args":{"texto":"Resultados","segundos":8}} — aguardar ATÉ que um texto apareça na página (melhor que "esperar" fixo; até 15s)
+{"tool":"agora","args":{}} — obter a data e a hora atuais (para preencher formulários com a data de hoje, etc.)
 {"tool":"olhar","args":{}} — tirar uma captura de tela e descrevê-la com o modelo de visão (use quando o texto/elementos não bastarem, ex.: página visual ou vazia)
 {"tool":"listar_abas","args":{}} — listar as abas abertas da janela
 {"tool":"trocar_aba","args":{"id":N}} — ativar a aba de id [N]
@@ -374,8 +384,8 @@ async function tool(t, args) {
   return { ok: false, error: "service worker não respondeu (recarregue a extensão em chrome://extensions)" };
 }
 
-const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "clicar", "digitar", "tecla", "rolar", "rolar_ate", "ler", "extrair", "esperar", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "perguntar", "concluir"];
-const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir", rolar_ate: "texto", extrair: "o_que" };
+const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "fechar_aba", "clicar", "clicar_texto", "digitar", "limpar", "tecla", "hover", "rolar", "rolar_ate", "rolar_fim", "ler", "links", "extrair", "esperar", "esperar_por", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "agora", "perguntar", "concluir"];
+const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir", rolar_ate: "texto", clicar_texto: "texto", esperar_por: "texto", extrair: "o_que" };
 
 const VISION_MODEL = "mangaba-vision-q8";
 
@@ -542,14 +552,24 @@ function describeAction(act, label) {
     case "navegar": return `Abrindo ${a.url}`;
     case "nova_aba": return `Abrindo nova aba: ${a.url}`;
     case "voltar": return "Voltando à página anterior";
+    case "avancar": return "Avançando para a próxima página";
+    case "recarregar": return "Recarregando a página";
+    case "fechar_aba": return `Fechando a aba [${a.id}]`;
     case "clicar": return `Clicando em${alvo}`;
+    case "clicar_texto": return `Clicando em "${a.texto}"`;
     case "digitar": return `Digitando "${String(a.texto || "").slice(0, 50)}"`;
+    case "limpar": return `Limpando o campo${alvo}`;
     case "tecla": return `Pressionando ${a.tecla || "Enter"}`;
+    case "hover": return `Passando o mouse sobre${alvo}`;
     case "rolar": return `Rolando para ${a.dir || "baixo"}`;
     case "rolar_ate": return `Rolando até "${a.texto}"`;
+    case "rolar_fim": return "Rolando até o fim da página";
     case "extrair": return `Extraindo: ${a.o_que || "dados"}`;
     case "ler": return `Lendo a página${a.offset ? ` (continuação)` : ""}`;
+    case "links": return "Listando os links da página";
     case "esperar": return `Aguardando ${a.segundos || 1}s`;
+    case "esperar_por": return `Aguardando "${a.texto}" aparecer`;
+    case "agora": return "Consultando data/hora";
     case "olhar": return "Analisando a tela";
     case "listar_abas": return "Listando abas abertas";
     case "trocar_aba": return `Trocando de aba`;
@@ -617,7 +637,7 @@ async function runAgent(task) {
     const agent = sel !== "auto" ? (AGENTS.find((a) => a.id === sel) || UNIFIED) : UNIFIED;
     box.add(`${agent.nome} assumiu a tarefa`);
 
-    const NAVEGA = ["navegar", "nova_aba", "voltar", "clicar", "tecla", "curtir"];
+    const NAVEGA = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "clicar", "clicar_texto", "tecla", "curtir"];
     // executa UMA ação; retorna FINISH (encerra), BREAK (re-observar a página) ou NEXT (seguir no lote)
     async function handleAct(act, snap, passo) {
       if (act.tool === "digitar") ultimoTexto = String(act.args?.texto ?? "");
@@ -687,15 +707,16 @@ async function runAgent(task) {
       }
 
       // confirmação humana para ações sensíveis
-      const label = elLabel(snap, act.args?.i);
+      // clicar_texto não tem índice: o próprio texto pedido é o rótulo p/ a checagem de sensibilidade
+      const label = act.tool === "clicar_texto" ? String(act.args?.texto || "") : elLabel(snap, act.args?.i);
       const rotuloForm = (i) => (form.match(new RegExp(`^\\[${i}\\][^"]*"([^"]*)"`, "m"))?.[1]) || elLabel(snap, i);
       // envio de mensagem/comentário detectado pela AÇÃO+rótulo (não pelo agente) — publicar sempre confirma
       // só é ENVIO se já houver texto digitado — abrir/ativar o campo ("Adicionar um comentário") não deve pedir confirmação
       const ehEnvioMsg = !!ultimoTexto
-        && (act.tool === "clicar" || (act.tool === "tecla" && (act.args?.tecla || "Enter") === "Enter"))
+        && (act.tool === "clicar" || act.tool === "clicar_texto" || (act.tool === "tecla" && (act.args?.tecla || "Enter") === "Enter"))
         && /coment|responder|reply|publicar|postar|tweet|mensagem|message|enviar|\bsend\b/i.test(label);
       const sensivel = ehEnvioMsg ||
-        ((act.tool === "clicar" || act.tool === "tecla") && SENSITIVE_CLICK.test(label)) ||
+        ((act.tool === "clicar" || act.tool === "clicar_texto" || act.tool === "tecla") && SENSITIVE_CLICK.test(label)) ||
         ((act.tool === "digitar" || act.tool === "preencher") &&
           (act.tool === "preencher" ? (act.args?.campos || []).some((c) => SENSITIVE_FIELD.test(rotuloForm(c.i))) : SENSITIVE_FIELD.test(label)));
       if (sensivel) {
@@ -736,6 +757,9 @@ async function runAgent(task) {
       } else if (act.tool === "formulario" && res?.ok) {
         form = String(res.out).slice(0, 1800);
         feitas.push(`formulario → mapa obtido (veja "Mapa do formulário"); preencha o que faltar ou pergunte os dados ao usuário`);
+      } else if (act.tool === "links" && res?.ok) {
+        leitura = "Links visíveis da página:\n" + String(res.out).slice(0, 4000);
+        feitas.push(`links → lista obtida (veja "Conteúdo lido"); navegue por um deles ou use "clicar_texto"`);
       } else {
         feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
       }

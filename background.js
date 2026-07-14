@@ -245,6 +245,78 @@ const readFn = (offset) => {
     ? `\n[...a página tem ${t.length} caracteres; para continuar use "ler" com offset=${o + 6000}]`
     : "");
 };
+// passa o mouse sobre um elemento (revela menus suspensos / tooltips que só aparecem no hover)
+const hoverFn = (i) => {
+  const el = (window.__mgbEls || [])[i];
+  if (!el) return "elemento [" + i + "] não encontrado";
+  el.scrollIntoView({ block: "center" });
+  const r = el.getBoundingClientRect();
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+  for (const [Ctor, type] of [[PointerEvent, "pointerover"], [MouseEvent, "mouseover"], [MouseEvent, "mouseenter"], [PointerEvent, "pointermove"], [MouseEvent, "mousemove"]])
+    el.dispatchEvent(new Ctor(type, opts));
+  return "passei o mouse sobre [" + i + "]";
+};
+// esvazia um campo de texto (antes de digitar um valor novo)
+const clearFn = (i) => {
+  const el = (window.__mgbEls || [])[i];
+  if (!el) return "elemento [" + i + "] não encontrado";
+  if (el.type === "password") return "recusado: campo de senha";
+  el.focus();
+  if (el.isContentEditable) el.textContent = "";
+  else {
+    const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const set = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    set ? set.call(el, "") : (el.value = "");
+  }
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return "limpei o campo [" + i + "]";
+};
+// clica no primeiro elemento clicável cujo texto visível corresponde — robusto quando o índice [N] mudou
+const clickTextFn = (texto) => {
+  const alvo = String(texto).toLowerCase().trim();
+  if (!alvo) return "texto vazio";
+  const SEL = 'a[href],button,input[type="submit"],input[type="button"],[role="button"],[role="link"],summary,label,[onclick]';
+  const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const rot = (el) => (el.innerText || el.value || el.getAttribute("aria-label") || el.title || "").toLowerCase().trim();
+  const cand = [...document.querySelectorAll(SEL)].filter(vis);
+  let el = cand.find((e) => rot(e) === alvo) || cand.find((e) => rot(e).includes(alvo));
+  if (!el) { // fallback: sobe até o ancestral clicável do nó que tem exatamente esse texto
+    const no = [...document.querySelectorAll("body *")].find((e) => vis(e) && (e.innerText || "").toLowerCase().trim() === alvo);
+    el = no && no.closest(SEL);
+  }
+  if (!el) return `nenhum elemento clicável com o texto "${texto}"`;
+  el.scrollIntoView({ block: "center" });
+  const o = el.style.outline; el.style.outline = "3px solid #F0781E"; setTimeout(() => (el.style.outline = o), 700);
+  const r = el.getBoundingClientRect();
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+  for (const [Ctor, type] of [[PointerEvent, "pointerdown"], [MouseEvent, "mousedown"], [PointerEvent, "pointerup"], [MouseEvent, "mouseup"]])
+    el.dispatchEvent(new Ctor(type, opts));
+  el.click();
+  return `cliquei em "${(el.innerText || el.value || texto).trim().slice(0, 40)}"`;
+};
+// rola até o fim da página — dispara o carregamento preguiçoso (lazy-load) de feeds/listas
+const scrollBottomFn = () => {
+  window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+  return "rolei até o fim da página";
+};
+// lista os links visíveis (texto → URL) — útil p/ escolher um resultado ou navegar
+const linksFn = () => {
+  const seen = new Set(), out = [];
+  for (const a of document.querySelectorAll("a[href]")) {
+    const r = a.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    const href = a.href;
+    if (!/^https?:/.test(href) || seen.has(href)) continue;
+    seen.add(href);
+    const txt = (a.innerText || a.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 60);
+    if (txt) out.push(`- ${txt} → ${href.slice(0, 90)}`);
+    if (out.length >= 40) break;
+  }
+  return out.length ? out.join("\n") : "(nenhum link visível)";
+};
+// checa se um texto já apareceu no corpo da página (para "esperar_por")
+const hasTextFn = (texto) => (document.body?.innerText || "").toLowerCase().includes(String(texto).toLowerCase().trim());
 
 async function waitLoad(tabId, ms = 10000) {
   const t0 = Date.now();
@@ -291,6 +363,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const tab = await getTab();
         const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 });
         out = { dataUrl };
+      } else if (tool === "agora") {
+        out = "Data e hora atuais: " + new Date().toLocaleString("pt-BR", { dateStyle: "full", timeStyle: "short" });
+      } else if (tool === "fechar_aba") {
+        const id = +args.id;
+        if (!id) out = "informe o id da aba (use listar_abas primeiro)";
+        else { await chrome.tabs.remove(id); out = "fechei a aba [" + id + "]"; }
       } else {
         const tab = await getTab();
         if (tool === "snapshot") {
@@ -327,8 +405,33 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           out = out || "voltei para a página anterior";
         } else if (tool === "rolar") out = await exec(tab.id, scrollFn, [args.dir || "baixo"]);
         else if (tool === "rolar_ate") { out = await exec(tab.id, scrollToTextFn, [String(args.texto ?? "")]); await sleep(400); }
+        else if (tool === "rolar_fim") { out = await exec(tab.id, scrollBottomFn); await sleep(600); }
         else if (tool === "ler") out = await exec(tab.id, readFn, [args.offset | 0]);
-        else out = "ferramenta desconhecida: " + tool;
+        else if (tool === "links") out = await exec(tab.id, linksFn);
+        else if (tool === "hover") { out = await exec(tab.id, hoverFn, [args.i]); await sleep(400); }
+        else if (tool === "limpar") out = await exec(tab.id, clearFn, [args.i]);
+        else if (tool === "clicar_texto") {
+          out = await exec(tab.id, clickTextFn, [String(args.texto ?? "")]);
+          await sleep(800); await waitLoad(tab.id, 6000);
+        } else if (tool === "recarregar") {
+          await chrome.tabs.reload(tab.id);
+          await sleep(500); await waitLoad(tab.id);
+          out = "recarreguei a página";
+        } else if (tool === "avancar") {
+          try { await chrome.tabs.goForward(tab.id); } catch { out = "não há página à frente"; }
+          await sleep(500); await waitLoad(tab.id, 6000);
+          out = out || "avancei para a próxima página";
+        } else if (tool === "esperar_por") {
+          const alvo = String(args.texto ?? "");
+          const limite = Math.min(15, Math.max(1, +args.segundos || 8));
+          const t0 = Date.now(); let achou = false;
+          while (Date.now() - t0 < limite * 1000) {
+            achou = await exec(tab.id, hasTextFn, [alvo]).catch(() => false);
+            if (achou) break;
+            await sleep(400);
+          }
+          out = achou ? `"${alvo}" apareceu na página` : `"${alvo}" não apareceu em ${limite}s (a página pode não ter carregado ou o texto está diferente)`;
+        } else out = "ferramenta desconhecida: " + tool;
       }
       sendResponse({ ok: true, out });
     } catch (e) {
