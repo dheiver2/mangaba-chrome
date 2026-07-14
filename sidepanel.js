@@ -468,6 +468,16 @@ let agentRun = null; // {cancel, waiting}
 const SENSITIVE_CLICK = /comprar|pagar|pagamento|checkout|finalizar|enviar|send|publicar|postar|post|tweet|responder|reply|compartilhar|share|excluir|apagar|deletar|remover|delete|assinar|transferir|confirmar|entrar|login|log ?in|sign ?in/i;
 const SENSITIVE_FIELD = /senha|password|cart[ãa]o|cvv|cpf|cnpj|\brg\b|c[óo]digo|token|2fa|otp|pin/i;
 
+// sinais de CAPTCHA / desafio anti-bot — o agente NUNCA resolve: detecta, pausa e devolve o controle ao usuário.
+// (resolver CAPTCHA automatizado burla a proteção anti-bot e viola os ToS das plataformas)
+const CAPTCHA_SIG = /recaptcha|hcaptcha|h-captcha|\bcaptcha\b|turnstile|cf[-_]chl|__cf_chl|challenges\.cloudflare|\/sorry\/|n[ãa]o sou um rob[ôo]|not a robot|i'?m not a robot|verify (?:you|that you)(?:'re| a)?re? human|are you (?:a )?human|verifique se voc[êe] [ée] humano|confirme que voc[êe] [ée] humano|unusual traffic|tr[áa]fego incomum|prove you'?re human|complete the (?:security )?check/i;
+function pareceCaptcha(snap) {
+  if (!snap) return false;
+  const alvo = `${snap.url || ""} ${snap.trecho || ""} ` +
+    snap.elements.map((e) => `${e.texto || ""} ${e.href || ""} ${e.tipo || ""}`).join(" ");
+  return CAPTCHA_SIG.test(alvo);
+}
+
 function setStop(on) {
   btnSend.textContent = on ? "■" : "↑";
   btnSend.title = on ? "Parar tarefa" : "Enviar";
@@ -567,7 +577,7 @@ async function runAgent(task) {
     if (statusTxt) status.textContent = `${statusTxt} · ${secs()}s`;
   }, 1000);
 
-  const visited = [], feitas = [];
+  const visited = [], feitas = [], captchaPausado = new Set(); // URLs onde já pausei p/ CAPTCHA (não repausa em loop)
   let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false, resumoMemoria = "", sigAnterior = "", esperavaMudanca = false;
 
   const finish = (resposta) => {
@@ -776,6 +786,18 @@ async function runAgent(task) {
         visited.push(snap.url); prevKeys = new Set();
         // mudou de página: o conteúdo lido/mapeado/visto era da página ANTERIOR — descarta p/ não induzir o modelo com dado velho
         leitura = ""; form = ""; visao = ""; leuAlguma = false; rolares = 0;
+      }
+      // CAPTCHA / desafio anti-bot: NÃO resolvo — pauso e devolvo o controle pro usuário, depois retomo de onde parou.
+      if (snap && pareceCaptcha(snap) && !captchaPausado.has(snap.url)) {
+        captchaPausado.add(snap.url);
+        box.add("CAPTCHA/desafio detectado — passando pra você");
+        statusTxt = null;
+        status.textContent = "Aguardando você resolver o desafio...";
+        const ans = await askUser('Apareceu um CAPTCHA ou desafio de verificação nesta página, e eu não resolvo esse tipo de coisa automaticamente. Resolva você (marque "não sou um robô", complete o desafio, etc.) e me avise aqui quando terminar para eu continuar — ou diga "pule" para eu tentar outro caminho.');
+        if (agentRun.cancel) break; // parou enquanto esperava
+        statusTxt = `${agent.nome} · retomando`;
+        feitas.push(`havia um CAPTCHA/desafio nesta página — o usuário resolveu manualmente e respondeu: "${String(ans).slice(0, 80)}". Reobserve a página e siga a tarefa de onde parou.`);
+        continue; // reobserva a página do zero no próximo passo
       }
       const contexto = snap ? fmtSnapshot(snap, prevKeys) : `(sem acesso à página: ${snapRes?.error || "?"} — use "navegar" para abrir um site)`;
       if (snap) prevKeys = new Set(snap.elements.map(elKey));
