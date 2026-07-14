@@ -212,7 +212,11 @@ const AGENTS = [
   { id: "extrator",    nome: "Extrator",    desc: "raspa listas e tabelas de páginas (preços, resultados, imóveis, vagas) e entrega em tabela Markdown limpa" },
   { id: "painel",      nome: "Painel",      desc: "entra em dashboards/painéis, navega até o relatório, espera carregar e extrai os números" },
   { id: "monitor",     nome: "Monitor",     desc: "checa um trecho específico de uma página (preço, estoque, status) e relata se mudou em relação ao combinado" },
-  { id: "comparador",  nome: "Comparador",  desc: "abre 2–3 fontes, extrai o mesmo dado de cada e monta um comparativo lado a lado" }
+  { id: "comparador",  nome: "Comparador",  desc: "abre 2–3 fontes, extrai o mesmo dado de cada e monta um comparativo lado a lado" },
+  { id: "agendador",   nome: "Agendador",   desc: "reserva horários, consultas e reuniões: escolhe data/hora, preenche e para antes de confirmar" },
+  { id: "candidato",   nome: "Candidato",   desc: "preenche candidaturas a vagas (LinkedIn, Gupy, Indeed) com os dados do usuário, uma por vez, com envio confirmado" },
+  { id: "coletor",     nome: "Coletor",     desc: "localiza faturas, boletos, relatórios e PDFs numa página e lista os links para o usuário baixar" },
+  { id: "rastreador",  nome: "Rastreador",  desc: "consulta o status de encomendas e pedidos (Correios, transportadora, marketplace) e relata onde está" }
 ];
 
 const PESQUISADOR_FLUXO = `
@@ -289,8 +293,47 @@ FLUXO DE COMPARAÇÃO ENTRE FONTES:
 3. Use SÓ dados que você realmente leu de cada fonte — nunca invente para completar a tabela; se não achou numa fonte, marque "não encontrado".
 4. No "concluir", entregue UMA tabela Markdown comparativa (uma linha por fonte) e uma frase dizendo qual é a melhor opção segundo o critério pedido.`;
 
+const AGENDADOR_FLUXO = `
+
+FLUXO DE AGENDAMENTO/RESERVA:
+1. Navegue até a página de agendamento/reserva. Se pedir login, use o handoff (preencha o usuário; o usuário conclui; CAPTCHA pausa).
+2. Escolha o serviço/profissional/local pedido ("clicar_texto"/"selecionar").
+3. Escolha DATA e HORÁRIO: use "ler"/"olhar" para ver a disponibilidade; se precisar da data de hoje/relativa, use "agora". Clique no horário desejado.
+4. Preencha os dados necessários com "preencher" (use {{chave}} p/ nome/email/telefone; NUNCA invente dado pessoal — se faltar, "perguntar").
+5. PARE antes de confirmar: o botão final (Confirmar/Reservar/Agendar) é sensível e o USUÁRIO confirma. Mostre um resumo (serviço, data, hora) antes.
+6. NUNCA conclua pagamento — se a reserva exigir pagar, use "concluir" pedindo que o usuário finalize.`;
+
+const CANDIDATO_FLUXO = `
+
+FLUXO DE CANDIDATURA A VAGAS:
+1. Abra a vaga pedida. Se exigir login, use o handoff (não digita senha).
+2. Clique em "Candidatar-se"/"Easy Apply"/"Candidatura simplificada" com "clicar_texto".
+3. Use "formulario" para mapear os campos e "preencher" com {{dados}} (nome, email, telefone...). NUNCA invente dado pessoal — se faltar (pretensão salarial, carta), use "perguntar" listando tudo de uma vez.
+4. Anexos (currículo): se pedir upload de arquivo, avise no "perguntar"/"concluir" que o usuário precisa anexar — você não sobe arquivos.
+5. Envie SÓ após conferir; o botão Enviar/Submeter é sensível e o USUÁRIO confirma.
+6. VÁRIAS VAGAS: uma por vez, conte o progresso ("2/5") e nunca dispare candidaturas em massa sem o usuário confirmar cada envio.`;
+
+const COLETOR_FLUXO = `
+
+FLUXO DE COLETA DE ARQUIVOS/FATURAS:
+1. Navegue até onde estão os arquivos (área do cliente, faturas, downloads). Login via handoff se preciso.
+2. Se a lista for longa/paginada, use "rolar_fim" e "clicar_texto" em "Próxima" para ver tudo.
+3. Use "links" para listar os links e "extrair" para casar cada arquivo com sua descrição (ex.: "mês de referência e valor de cada fatura").
+4. Você NÃO baixa arquivos sozinho — reúna os links e as descrições.
+5. No "concluir", entregue uma tabela Markdown (descrição | link) e diga que é só clicar para baixar. Se algum exigir mais um clique para gerar o arquivo, explique o passo.`;
+
+const RASTREADOR_FLUXO = `
+
+FLUXO DE RASTREAMENTO DE PEDIDO:
+1. Com o código de rastreio/nº do pedido, vá ao site certo (Correios, transportadora, ou o pedido no marketplace) e informe o código ("digitar"+"tecla" Enter, ou "preencher").
+2. Se não houver código, use "perguntar" pedindo o código e a transportadora/loja.
+3. Rastreamento carrega assíncrono: use "esperar_por" com um texto do resultado (ex.: "Objeto", "Em trânsito", "Entregue") antes de ler.
+4. Use "ler"/"extrair" para pegar o status atual e o histórico de eventos.
+5. No "concluir", relate: status ATUAL, última atualização (data/local) e previsão de entrega se houver. Não invente prazos.`;
+
 const FLUXOS = { pesquisador: PESQUISADOR_FLUXO, social: SOCIAL_FLUXO, acesso: LOGIN_FLUXO, leitor: LEITOR_FLUXO,
-  extrator: EXTRATOR_FLUXO, painel: PAINEL_FLUXO, monitor: MONITOR_FLUXO, comparador: COMPARADOR_FLUXO };
+  extrator: EXTRATOR_FLUXO, painel: PAINEL_FLUXO, monitor: MONITOR_FLUXO, comparador: COMPARADOR_FLUXO,
+  agendador: AGENDADOR_FLUXO, candidato: CANDIDATO_FLUXO, coletor: COLETOR_FLUXO, rastreador: RASTREADOR_FLUXO };
 
 // Agente ÚNICO (padrão): faz tudo, sem o usuário precisar escolher especialidade.
 const UNIFIED = { id: "mangaba", nome: "Mangaba", desc: "assistente completa que navega, pesquisa, lê, preenche formulários, interage em redes sociais e conduz login" };
