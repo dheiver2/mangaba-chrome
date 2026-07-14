@@ -503,16 +503,25 @@ function fmtSnapshot(s, prevKeys) {
 }
 
 const routeCache = new Map(); // tarefa → agente escolhido (evita chamada repetida ao orquestrador)
+// roteamento do modo Automático: escolhe entre o agente "faz tudo" (padrão seguro) e os especialistas.
+// Na dúvida cai em UNIFIED — evita mandar tarefa genérica p/ um especialista que restringe o fluxo.
 async function pickAgent(task) {
   const key = task.toLowerCase().trim().slice(0, 120);
   if (routeCache.has(key)) return routeCache.get(key);
-  const lista = AGENTS.map((a) => `${a.id}: ${a.desc}`).join("\n");
-  const raw = await llm([
-    { role: "system", content: "Você é o Orquestrador da equipe Mangaba AI. Escolha o agente mais adequado para a tarefa. Responda SOMENTE com JSON no formato {\"agente\":\"id\"}." },
-    { role: "user", content: `Agentes:\n${lista}\n\nTarefa: ${task}` }
-  ], 60);
-  const id = parseAction(raw)?.agente;
-  const ag = AGENTS.find((a) => a.id === id) || AGENTS[0];
+  const cands = [UNIFIED, ...AGENTS];
+  const lista = cands.map((a) => `${a.id}: ${a.desc}`).join("\n");
+  let ag = UNIFIED;
+  try {
+    const raw = await llm([
+      { role: "system", content: "Você é o Orquestrador da Mangaba AI. Escolha o agente mais adequado para a tarefa. Se a tarefa for genérica, mista ou você tiver dúvida, escolha \"mangaba\" (faz tudo). Responda SOMENTE com JSON: {\"agente\":\"id\"}." },
+      { role: "user", content: `Agentes:\n${lista}\n\nTarefa: ${task}` }
+    ], 60);
+    const id = parseAction(raw)?.agente;
+    ag = cands.find((a) => a.id === id) || UNIFIED;
+  } catch (e) {
+    if (e.name === "AbortError") throw e; // parada do usuário durante o roteamento
+    ag = UNIFIED; // qualquer outra falha → agente padrão
+  }
   routeCache.set(key, ag);
   return ag;
 }
@@ -693,10 +702,12 @@ async function runAgent(task) {
     if (plano.length) box.add("Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
     if (meta >= 2) box.add(`Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
 
-    // agente: manual (dropdown) ou orquestrador
+    // agente: manual (dropdown) ou, no Automático, o Orquestrador escolhe (com viés seguro p/ o "faz tudo")
     const sel = $("agentSel")?.value || "auto";
-    const agent = sel !== "auto" ? (AGENTS.find((a) => a.id === sel) || UNIFIED) : UNIFIED;
-    box.add(`${agent.nome} assumiu a tarefa`);
+    let agent;
+    if (sel !== "auto") agent = AGENTS.find((a) => a.id === sel) || UNIFIED;
+    else { statusTxt = "Escolhendo o agente"; agent = await pickAgent(task); }
+    box.add(`${agent.nome} assumiu a tarefa${sel === "auto" && agent.id !== "mangaba" ? " (escolhido automaticamente)" : ""}`);
 
     const NAVEGA = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "clicar", "clicar_texto", "tecla", "curtir"];
     // executa UMA ação; retorna FINISH (encerra), BREAK (re-observar a página) ou NEXT (seguir no lote)
