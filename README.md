@@ -8,6 +8,7 @@ Assistente de IA no painel lateral do Chrome, conectado ao **Mangaba Gateway** (
 - Chat no **side panel** (clique no ícone da extensão)
 - **Contexto da página**: lê título, URL e texto da aba ativa e responde sobre ela
 - **🤖 Modo agente**: equipe de agentes (Orquestrador + Navegador, Pesquisador, Leitor, Preenchedor) que executa tarefas no navegador — abre URLs, clica, digita, rola e lê páginas, decidindo passo a passo via LLM
+- **🔌 Ferramentas MCP externas**: o agente conecta a servidores **MCP** (Model Context Protocol) por HTTP, descobre as ferramentas e as usa junto das ações do navegador. Vem com 2 servidores públicos somente-leitura pré-configurados (DeepWiki e Context7); edite/remova em ⚙︎ → *Servidores MCP*
 - **Streaming** de resposta (SSE, compatível com API estilo OpenAI)
 - Configurável: URL do gateway, modelo e API key (⚙︎ no topo)
 
@@ -27,6 +28,7 @@ Para usar via cloudflared, troque a URL nas configurações (⚙︎).
 | Arquivo | Papel |
 |---|---|
 | `manifest.json` | MV3: side panel, scripting, storage |
-| `background.js` | Service worker: extrai texto da aba ativa |
+| `background.js` | Service worker: extrai texto da aba ativa e executa as ferramentas do agente |
+| `mcp.js` | Cliente MCP sobre HTTP (JSON-RPC 2.0): conecta, lista e chama ferramentas externas |
 | `sidepanel.html/css/js` | UI do chat, config e streaming |
 | `icons/` | Fruta oficial mangaba.ai (`mark.png`) + ícones PNG 16/48/128 |

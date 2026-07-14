@@ -27,6 +27,9 @@
   <label>Meus dados (chave: valor — use como {{chave}}; nunca vão ao modelo)
     <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
   </label>
+  <label>Servidores MCP (nome | https://url | Authorization opcional — um por linha; # comenta)
+    <textarea id="cfgMcps" rows="4" placeholder="deepwiki | https://mcp.deepwiki.com/mcp&#10;context7 | https://mcp.context7.com/mcp&#10;# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"></textarea>
+  </label>
   <label>Modo do agente (avançado — deixe em Automático)
     <select id="agentSel">
       <option value="auto">Automático (faz tudo)</option>
@@ -55,6 +58,7 @@
   <div class="hint">A Mangaba entende sozinha se é pergunta ou tarefa.</div>
 </footer>
 
+<script src="mcp.js"></script>
 <script src="sidepanel.js"></script>
 </body>
 </html>

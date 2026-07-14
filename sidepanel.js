@@ -11,7 +11,9 @@ const DEFAULTS = {
   model: "",
   key: "",
   maxSteps: 20,
-  dados: "" // dados pessoais do usuário (chave: valor por linha) — usados via {{chave}}, nunca vão ao modelo
+  dados: "", // dados pessoais do usuário (chave: valor por linha) — usados via {{chave}}, nunca vão ao modelo
+  // servidores MCP (nome | url | auth). Padrão: 2 públicos e SOMENTE-LEITURA (docs de repos/bibliotecas). Edite/remova à vontade.
+  mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
 };
 let cfg = { ...DEFAULTS };
 
@@ -22,6 +24,7 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgKey").value = cfg.key;
   $("cfgSteps").value = cfg.maxSteps;
   $("cfgDados").value = cfg.dados || "";
+  $("cfgMcps").value = cfg.mcps ?? DEFAULTS.mcps;
 });
 
 // mapa dos dados pessoais (chave->valor) e substituição de {{chave}} feita SÓ na execução (fora do modelo)
@@ -53,7 +56,8 @@ $("btnSave").onclick = () => {
     model: $("cfgModel").value.trim(),
     key: $("cfgKey").value.trim(),
     maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20)),
-    dados: $("cfgDados").value.trim()
+    dados: $("cfgDados").value.trim(),
+    mcps: $("cfgMcps").value.trim()
   };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
@@ -384,7 +388,7 @@ async function tool(t, args) {
   return { ok: false, error: "service worker não respondeu (recarregue a extensão em chrome://extensions)" };
 }
 
-const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "fechar_aba", "clicar", "clicar_texto", "digitar", "limpar", "tecla", "hover", "rolar", "rolar_ate", "rolar_fim", "ler", "links", "extrair", "esperar", "esperar_por", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "agora", "perguntar", "concluir"];
+const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "fechar_aba", "clicar", "clicar_texto", "digitar", "limpar", "tecla", "hover", "rolar", "rolar_ate", "rolar_fim", "ler", "links", "extrair", "esperar", "esperar_por", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "agora", "mcp", "perguntar", "concluir"];
 const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir", rolar_ate: "texto", clicar_texto: "texto", esperar_por: "texto", extrair: "o_que" };
 
 const VISION_MODEL = "mangaba-vision-q8";
@@ -477,6 +481,8 @@ let agentRun = null; // {cancel, waiting}
 
 const SENSITIVE_CLICK = /comprar|pagar|pagamento|checkout|finalizar|enviar|send|publicar|postar|post|tweet|responder|reply|compartilhar|share|excluir|apagar|deletar|remover|delete|assinar|transferir|confirmar|entrar|login|log ?in|sign ?in/i;
 const SENSITIVE_FIELD = /senha|password|cart[ãa]o|cvv|cpf|cnpj|\brg\b|c[óo]digo|token|2fa|otp|pin/i;
+// ferramenta MCP cujo nome sugere efeito colateral/mutação → confirmar antes de executar (leitura/consulta não precisa)
+const MCP_MUTAVEL = /create|delete|remove|update|write|send|post|put|patch|upload|publish|merge|push|pay|transfer|execute|run|invoke|criar|apagar|excluir|enviar|escrever|publicar|deletar|remover|atualizar/i;
 
 // sinais de CAPTCHA / desafio anti-bot — o agente NUNCA resolve: detecta, pausa e devolve o controle ao usuário.
 // (resolver CAPTCHA automatizado burla a proteção anti-bot e viola os ToS das plataformas)
@@ -570,6 +576,7 @@ function describeAction(act, label) {
     case "esperar": return `Aguardando ${a.segundos || 1}s`;
     case "esperar_por": return `Aguardando "${a.texto}" aparecer`;
     case "agora": return "Consultando data/hora";
+    case "mcp": return `MCP: ${a.servidor || "?"} · ${a.ferramenta || "?"}`;
     case "olhar": return "Analisando a tela";
     case "listar_abas": return "Listando abas abertas";
     case "trocar_aba": return `Trocando de aba`;
@@ -598,7 +605,7 @@ async function runAgent(task) {
   }, 1000);
 
   const visited = [], feitas = [], captchaPausado = new Set(); // URLs onde já pausei p/ CAPTCHA (não repausa em loop)
-  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false, resumoMemoria = "", sigAnterior = "", esperavaMudanca = false;
+  let leitura = "", visao = "", form = "", lastSig = "", lastCount = 0, ultimoTexto = "", prevKeys = new Set(), invalidos = 0, rolares = 0, leuAlguma = false, avisosLoop = 0, metaLembrete = false, resumoMemoria = "", sigAnterior = "", esperavaMudanca = false, mcpTexto = "";
 
   const finish = (resposta) => {
     const r = resposta || "Tarefa concluída.";
@@ -611,6 +618,19 @@ async function runAgent(task) {
   };
 
   try {
+    // conecta aos servidores MCP configurados e monta o catálogo de ferramentas externas p/ o prompt
+    if (cfg.mcps && cfg.mcps.trim().split("\n").some((l) => l.trim() && !l.trim().startsWith("#"))) {
+      box.add("Conectando aos servidores MCP...");
+      try {
+        const cat = await mcpDiscover(cfg.mcps);
+        mcpTexto = mcpCatalogText(cat);
+        const ok = cat.filter((c) => !c.erro).length;
+        const nTools = cat.reduce((n, c) => n + (c.tools?.length || 0), 0);
+        const offline = cat.filter((c) => c.erro).map((c) => c.nome);
+        box.add(`MCP: ${ok}/${cat.length} conectado(s), ${nTools} ferramenta(s)${offline.length ? ` — offline: ${offline.join(", ")}` : ""}`);
+      } catch (e) { box.add("MCP: falha ao conectar — " + String(e.message || e).slice(0, 60)); }
+    }
+
     // detecta tarefa com N itens ("comente 10 posts", "curta 3 vídeos") p/ decompor e rastrear progresso
     const nums = (task.match(/\b\d{1,3}\b/g) || []).map(Number);
     const meta = nums.length ? Math.min(50, Math.max(...nums)) : 0;
@@ -703,6 +723,34 @@ async function runAgent(task) {
         const ans = await askUser(q);
         statusTxt = `${agent.nome} · retomando`;
         feitas.push(`perguntar "${q.slice(0, 60)}" → usuário respondeu: "${ans.slice(0, 150)}"`);
+        return "BREAK";
+      }
+
+      if (act.tool === "mcp") {
+        const servidor = act.args?.servidor || "";
+        const ferramenta = act.args?.ferramenta || act.args?.tool || "";
+        let argumentos = act.args?.argumentos || act.args?.arguments || {};
+        // ferramenta MCP que aparenta MUTAÇÃO (enviar/criar/apagar/pagar...) → pede confirmação, como as ações sensíveis do navegador
+        if (MCP_MUTAVEL.test(ferramenta)) {
+          statusTxt = null;
+          status.textContent = "Aguardando sua confirmação...";
+          const okd = await confirmAction(`executar a ferramenta MCP "${ferramenta}" em "${servidor}" com ${JSON.stringify(argumentos).slice(0, 140)}`);
+          statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
+          if (!okd) { feitas.push(`usuário NEGOU mcp ${servidor}/${ferramenta} — siga outro caminho ou conclua`); box.add("Chamada MCP negada por você"); return "BREAK"; }
+        }
+        box.add(`${passo}. MCP ${servidor} · ${ferramenta}`);
+        statusTxt = `MCP: ${ferramenta}`;
+        // {{chave}} dos dados do usuário é resolvido AQUI (fora do modelo), inclusive dentro dos argumentos
+        try { argumentos = JSON.parse(subDados(JSON.stringify(argumentos))); } catch { /* mantém como está */ }
+        const res = await mcpCall(servidor, ferramenta, argumentos);
+        if (res.ok) {
+          leitura = `Resultado da ferramenta MCP ${servidor}/${ferramenta}:\n${res.out}`;
+          feitas.push(`mcp ${servidor}/${ferramenta} → resultado obtido (veja "Conteúdo lido"); use "concluir" se já basta`);
+        } else {
+          feitas.push(`mcp ${servidor}/${ferramenta} → ERRO: ${res.error}`);
+          box.add(`MCP erro: ${String(res.error).slice(0, 60)}`);
+        }
+        statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
         return "BREAK";
       }
 
@@ -842,6 +890,7 @@ async function runAgent(task) {
           `Tarefa do usuário: ${task}\n` +
           (plano.length ? `\nPlano combinado: ${plano.join("; ")}\n` : "") +
           (Object.keys(dadosMap()).length ? `\nDADOS DO USUÁRIO (para preencher, use o marcador {{chave}} — o valor real é inserido na hora e você NUNCA o vê): ${Object.keys(dadosMap()).map((k) => "{{" + k + "}}").join(", ")}\n` : "") +
+          mcpTexto +
           (meta >= 2 ? `\nMETA: ${meta} itens no total. Trabalhe UM item por vez; só use "concluir" quando os ${meta} estiverem realmente feitos. Vá contando quantos já completou.\n` : "") +
           (anteriores ? `\nTarefas anteriores nesta conversa:\n${anteriores}\n` : "") +
           // só as últimas 10 ações (o histórico não pode crescer sem limite: infla o prompt e trava o modelo)
