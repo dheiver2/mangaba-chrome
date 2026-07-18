@@ -1,34 +1,34 @@
-# Mangaba AI — Extensão Chrome 🥭
+# Mangaba AI — Chrome Extension 🥭
 
-📄 **Página / download:** https://dheiver2.github.io/mangaba-chrome/ (via GitHub Pages, pasta `docs/`)
+📄 **Page / download:** https://dheiver2.github.io/mangaba-chrome/ (via GitHub Pages, `docs/` folder)
 
-Assistente de IA no painel lateral do Chrome, conectado ao **Mangaba Gateway** (modelos GGUF locais). Código 100% original, Manifest V3, zero dependências.
+AI assistant in Chrome's side panel, connected to the **Mangaba Gateway** (local GGUF models). 100% original code, Manifest V3, zero dependencies.
 
-## Funcionalidades
-- Chat no **side panel** (clique no ícone da extensão)
-- **Contexto da página**: lê título, URL e texto da aba ativa e responde sobre ela
-- **🤖 Modo agente**: equipe de agentes (Orquestrador + Navegador, Pesquisador, Leitor, Preenchedor) que executa tarefas no navegador — abre URLs, clica, digita, rola e lê páginas, decidindo passo a passo via LLM
-- **🔌 Ferramentas MCP externas**: o agente conecta a servidores **MCP** (Model Context Protocol) por HTTP, descobre as ferramentas e as usa junto das ações do navegador. Vem com 2 servidores públicos somente-leitura pré-configurados (DeepWiki e Context7); edite/remova em ⚙︎ → *Servidores MCP*
-- **Streaming** de resposta (SSE, compatível com API estilo OpenAI)
-- Configurável: URL do gateway, modelo e API key (⚙︎ no topo)
+## Features
+- Chat in the **side panel** (click the extension icon)
+- **Page context**: reads the active tab's title, URL, and text, and answers questions about it
+- **🤖 Agent mode**: a team of agents (Orchestrator + Navigator, Researcher, Reader, Filler) that performs tasks in the browser — opens URLs, clicks, types, scrolls, and reads pages, deciding step by step via LLM
+- **🔌 External MCP tools**: the agent connects to **MCP** (Model Context Protocol) servers over HTTP, discovers their tools, and uses them alongside browser actions. Ships with 2 public read-only servers pre-configured (DeepWiki and Context7); edit/remove under ⚙︎ → *MCP Servers*
+- Response **streaming** (SSE, OpenAI-style API compatible)
+- Configurable: gateway URL, model, and API key (⚙︎ at the top)
 
-## Modo agente
-Marque **🤖 Modo agente** e peça a tarefa. O fluxo: planejador gera um plano curto → Orquestrador (ou o agente escolhido no dropdown) executa em passos JSON com status ao vivo e lista de passos colapsável. Ferramentas: navegar, nova_aba, voltar, clicar, digitar, tecla, rolar, ler (com offset), esperar, perguntar (ao usuário) e concluir. Segurança: campos de senha são bloqueados; cliques/preenchimentos sensíveis (comprar, pagar, excluir, cartão, CPF...) pedem confirmação sua; botão ■ para a tarefa a qualquer momento.
+## Agent mode
+Check **🤖 Agent mode** and ask for a task. Flow: a planner generates a short plan → the Orchestrator (or the agent picked from the dropdown) executes it in JSON steps with a live status and a collapsible step list. Tools: navigate, new_tab, back, click, type, key, scroll, read (with offset), wait, ask (the user), and done. Safety: password fields are blocked; sensitive clicks/fills (buy, pay, delete, card, SSN...) require your confirmation; the ■ button stops the task at any time.
 
-## Instalação
-1. Abra `chrome://extensions`
-2. Ative o **Modo do desenvolvedor**
-3. Clique em **Carregar sem compactação** e selecione esta pasta
+## Installation
+1. Open `chrome://extensions`
+2. Turn on **Developer mode**
+3. Click **Load unpacked** and select this folder
 
-## Configuração
-Padrão: `http://localhost:8080/v1/chat/completions` (Mangaba Gateway local).
-Para usar via cloudflared, troque a URL nas configurações (⚙︎).
+## Configuration
+Default: `http://localhost:8080/v1/chat/completions` (local Mangaba Gateway).
+To use it over cloudflared, change the URL in settings (⚙︎).
 
-## Arquivos
-| Arquivo | Papel |
+## Files
+| File | Role |
 |---|---|
 | `manifest.json` | MV3: side panel, scripting, storage |
-| `background.js` | Service worker: extrai texto da aba ativa e executa as ferramentas do agente |
-| `mcp.js` | Cliente MCP sobre HTTP (JSON-RPC 2.0): conecta, lista e chama ferramentas externas |
-| `sidepanel.html/css/js` | UI do chat, config e streaming |
-| `icons/` | Fruta oficial mangaba.ai (`mark.png`) + ícones PNG 16/48/128 |
+| `background.js` | Service worker: extracts the active tab's text and runs the agent's tools |
+| `mcp.js` | MCP client over HTTP (JSON-RPC 2.0): connects, lists, and calls external tools |
+| `sidepanel.html/css/js` | Chat UI, settings, and streaming |
+| `icons/` | Official mangaba.ai fruit mark (`mark.png`) + 16/48/128 PNG icons |

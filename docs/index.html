@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mangaba AI — Extensão Chrome</title>
-<meta name="description" content="Assistente brasileira no navegador: chat com contexto da página e agentes de IA que navegam, pesquisam, preenchem formulários e interagem em redes sociais por você.">
+<title>Mangaba AI — Chrome Extension</title>
+<meta name="description" content="An AI assistant in your browser: chat with page context and AI agents that browse, research, fill forms, and interact on social media for you.">
 <link rel="icon" href="mark.png">
 <style>
   :root{
@@ -44,6 +44,9 @@
   ol.steps li{margin:10px 0;padding-left:6px}
   code{background:#F8ECDD;border-radius:5px;padding:2px 7px;font:13.5px ui-monospace,Menlo,monospace}
   .note{background:#FFF8E1;border:1px solid #F2D49B;border-radius:12px;padding:14px 18px;font-size:14px;margin-top:16px}
+  .shot{margin:32px auto 0;max-width:640px;border:1px solid var(--borda);border-radius:14px;overflow:hidden;box-shadow:0 20px 50px rgba(58,49,41,.15)}
+  .shot img{display:block;width:100%;height:auto}
+  .cap{color:var(--suave);font-size:13px;text-align:center;margin-top:10px}
   footer{text-align:center;color:var(--suave);font-size:13px;padding:40px 20px 60px}
   @media (prefers-color-scheme:dark){
     :root{--creme:#241C15;--pessego:#1A130D;--marrom:#F3E9DE;--borda:#4A3A2C;--suave:#B8A490}
@@ -56,61 +59,61 @@
 <header>
   <img src="mark.png" alt="Mangaba">
   <h1>mangaba<span class="ai">.ai</span></h1>
-  <p class="sub">Assistente brasileira no seu navegador. Converse sobre a página atual e coloque <b>agentes de IA</b> para navegar, pesquisar, preencher formulários e interagir em redes sociais por você.</p>
+  <p class="sub">A Brazilian-made AI assistant right in your browser. Chat about the current page and put <b>AI agents</b> to work browsing, researching, filling out forms, and interacting on social media for you.</p>
   <div class="cta">
-    <a class="btn" href="mangaba-chrome-v1.17.0.zip" download>⬇ Baixar extensão (v1.17.0)</a>
-    <a class="btn ghost" href="#instalar">Como instalar</a>
+    <a class="btn" href="mangaba-chrome-v1.17.0.zip" download>⬇ Download extension (v1.17.0)</a>
+    <a class="btn ghost" href="#instalar">How to install</a>
   </div>
 </header>
 
 <div class="wrap">
 
 <section>
-  <div style="text-align:center"><span class="badge">Manifest V3 · zero dependências · 100% local</span></div>
-  <h2>O que ela faz</h2>
+  <div style="text-align:center"><span class="badge">Manifest V3 · zero dependencies · 100% local</span></div>
+  <h2>What it does</h2>
   <div class="grid">
-    <div class="card"><h3>💬 Chat com a página</h3><p>Lê o conteúdo da aba ativa e responde perguntas sobre ele, com respostas em Markdown e streaming ao vivo.</p></div>
-    <div class="card"><h3>🤖 Modo agente</h3><p>Uma equipe de agentes executa tarefas reais no navegador: navegar, clicar, digitar, rolar e ler — decidindo passo a passo.</p></div>
-    <div class="card"><h3>📝 Formulários</h3><p>Mapeia campos com rótulos e opções, preenche em lote, valida com o próprio site e nunca inventa dados pessoais.</p></div>
-    <div class="card"><h3>🔎 Busca na web</h3><p>Pesquisa em várias fontes, cruza as informações e responde citando os domínios usados.</p></div>
-    <div class="card"><h3>💬 Redes sociais</h3><p>Lê inbox e DMs, redige respostas, curte e comenta — com sua confirmação antes de publicar qualquer coisa.</p></div>
-    <div class="card"><h3>🔐 Login seguro</h3><p>Abre a tela de login e preenche o usuário, mas <b>nunca digita sua senha</b> — você conclui o acesso.</p></div>
-    <div class="card"><h3>👁️ Visão</h3><p>Tira captura da tela e a descreve com modelo de visão quando o texto da página não basta.</p></div>
-    <div class="card"><h3>⚡ Rápida</h3><p>Múltiplas ações por passo, KV-cache, pré-carga do modelo e estabilização de DOM (técnicas do browser-use).</p></div>
-    <div class="card"><h3>🔒 Segura</h3><p>HTML escapado contra XSS, confirmação humana em ações sensíveis e defesa contra injeção de instruções em páginas.</p></div>
+    <div class="card"><h3>💬 Chat with the page</h3><p>Reads the active tab's content and answers questions about it, with Markdown replies and live streaming.</p></div>
+    <div class="card"><h3>🤖 Agent mode</h3><p>A team of agents performs real tasks in the browser: navigating, clicking, typing, scrolling, and reading — deciding step by step.</p></div>
+    <div class="card"><h3>📝 Forms</h3><p>Maps fields with labels and options, fills them in batches, validates against the site itself, and never invents personal data.</p></div>
+    <div class="card"><h3>🔎 Web search</h3><p>Searches across multiple sources, cross-references the information, and answers citing the domains it used.</p></div>
+    <div class="card"><h3>💬 Social media</h3><p>Reads inbox and DMs, drafts replies, likes and comments — with your confirmation before publishing anything.</p></div>
+    <div class="card"><h3>🔐 Secure login</h3><p>Opens the login screen and fills in the username, but <b>never types your password</b> — you finish signing in.</p></div>
+    <div class="card"><h3>👁️ Vision</h3><p>Takes a screenshot and describes it with a vision model when the page text isn't enough.</p></div>
+    <div class="card"><h3>⚡ Fast</h3><p>Multiple actions per step, KV-cache, model pre-warming, and DOM stabilization (browser-use-style techniques).</p></div>
+    <div class="card"><h3>🔒 Secure</h3><p>HTML escaped against XSS, human confirmation on sensitive actions, and defenses against prompt injection from pages.</p></div>
   </div>
 </section>
 
 <section>
-  <h2>A equipe de agentes</h2>
+  <h2>The agent team</h2>
   <div class="agents">
-    <span class="agent">🧭 Navegador</span>
-    <span class="agent">🔎 Pesquisador</span>
-    <span class="agent">📖 Leitor</span>
-    <span class="agent">📝 Preenchedor</span>
+    <span class="agent">🧭 Navigator</span>
+    <span class="agent">🔎 Researcher</span>
+    <span class="agent">📖 Reader</span>
+    <span class="agent">📝 Filler</span>
     <span class="agent">💬 Social</span>
-    <span class="agent">🔐 Acesso</span>
+    <span class="agent">🔐 Access</span>
   </div>
 </section>
 
 <section id="instalar">
-  <h2>Como instalar</h2>
+  <h2>How to install</h2>
   <ol class="steps">
-    <li><a href="mangaba-chrome-v1.17.0.zip" download>Baixe o ZIP</a> e descompacte numa pasta.</li>
-    <li>Abra <code>chrome://extensions</code> no Chrome (ou Edge).</li>
-    <li>Ative o <b>Modo do desenvolvedor</b> (canto superior direito).</li>
-    <li>Clique em <b>Carregar sem compactação</b> e selecione a pasta descompactada.</li>
-    <li>Clique no ícone da Mangaba para abrir o painel lateral.</li>
-    <li>No <b>⚙︎</b>, informe a URL do seu <b>Mangaba Gateway</b> (padrão <code>http://localhost:8080/v1/chat/completions</code>) e o modelo.</li>
+    <li><a href="mangaba-chrome-v1.17.0.zip" download>Download the ZIP</a> and unzip it into a folder.</li>
+    <li>Open <code>chrome://extensions</code> in Chrome (or Edge).</li>
+    <li>Turn on <b>Developer mode</b> (top-right corner).</li>
+    <li>Click <b>Load unpacked</b> and select the unzipped folder.</li>
+    <li>Click the Mangaba icon to open the side panel.</li>
+    <li>In <b>⚙︎</b>, set your <b>Mangaba Gateway</b> URL (default <code>http://localhost:8080/v1/chat/completions</code>) and model.</li>
   </ol>
-  <div class="note">⚙️ A extensão precisa de um <b>Mangaba Gateway</b> (API compatível com OpenAI) para funcionar. Para o modo agente, prefira modelos maiores (ex.: <code>mangaba-pro</code> / <code>mangaba-max</code>) — os menores erram mais os passos.</div>
+  <div class="note">⚙️ The extension needs a <b>Mangaba Gateway</b> (OpenAI-compatible API) to work. For agent mode, prefer larger models (e.g. <code>mangaba-pro</code> / <code>mangaba-max</code>) — smaller ones make more mistakes on the steps.</div>
 </section>
 
 </div>
 
 <footer>
-  Mangaba AI · extensão Chrome · feita no Brasil 🇧🇷<br>
-  Código original, Manifest V3, sem rastreadores.
+  Mangaba AI · Chrome extension · made in Brazil 🇧🇷<br>
+  Original code, Manifest V3, no trackers.
 </footer>
 </body>
 </html>
