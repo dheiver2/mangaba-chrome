@@ -6,6 +6,30 @@ const history = [];      // chat normal {role, content}
 const agentHistory = []; // modo agente {task, resposta}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ---- CACHE DE RESPOSTAS (30s TTL, max 10 entries) ----
+const RESPONSE_CACHE = {};
+const hashPayload = (model, messages) => {
+  // Hash simples: concat modelo + conteúdo de todas as mensagens
+  const str = model + JSON.stringify(messages.map(m => ({ role: m.role, content: m.content })));
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash) + str.charCodeAt(i) | 0;
+  return 'h' + Math.abs(hash).toString(36);
+};
+const cacheResponse = (model, messages, response) => {
+  const hash = hashPayload(model, messages);
+  RESPONSE_CACHE[hash] = { response, ts: Date.now() };
+  // Manter no máximo 10 entradas
+  const keys = Object.keys(RESPONSE_CACHE);
+  if (keys.length > 10) delete RESPONSE_CACHE[keys[0]];
+};
+const getCachedResponse = (model, messages) => {
+  const hash = hashPayload(model, messages);
+  const cached = RESPONSE_CACHE[hash];
+  if (cached && Date.now() - cached.ts < 30000) return cached.response;
+  delete RESPONSE_CACHE[hash];
+  return null;
+};
+
 const DEFAULTS = {
   url: "https://mangabarouter.store/v1/chat/completions",
   model: "Mangaba-Qwen3-Coder-30B-A3B",
@@ -173,6 +197,11 @@ function classificaErro(status, body) {
 // chamadas (planejador, orquestrador, passos...) para o "parar" interromper na hora.
 async function llm(messages, maxTokens = 700, signal) {
   signal = signal || (agentRun && agentRun.abort && agentRun.abort.signal);
+
+  // Verifica cache antes de chamar gateway
+  const cached = getCachedResponse(cfg.model, messages);
+  if (cached) return cached;
+
   const headers = gatewayHeaders();
   await ensureModel(headers);
   let ult = "";
@@ -190,7 +219,9 @@ async function llm(messages, maxTokens = 700, signal) {
         if (!c.temp) throw Object.assign(new Error(c.msg), { fatal: true });
         throw new Error((ult = c.msg));
       }
-      return (await resp.json()).choices?.[0]?.message?.content || "";
+      const result = (await resp.json()).choices?.[0]?.message?.content || "";
+      cacheResponse(cfg.model, messages, result);
+      return result;
     } catch (e) {
       if (e.name === "AbortError") throw e; // parada do usuário: não tenta de novo
       if (e.fatal) throw e;

@@ -2,6 +2,22 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ---- CACHE DE SNAPSHOTS (30s TTL) ----
+const SNAPSHOT_CACHE = {};
+const cacheSnapshot = (tabId, url, data) => {
+  SNAPSHOT_CACHE[`${tabId}:${url}`] = { data, ts: Date.now() };
+};
+const getCachedSnapshot = (tabId, url) => {
+  const key = `${tabId}:${url}`;
+  const cached = SNAPSHOT_CACHE[key];
+  if (cached && Date.now() - cached.ts < 30000) return cached.data;
+  delete SNAPSHOT_CACHE[key];
+  return null;
+};
+const invalidateSnapshot = (tabId, url) => {
+  delete SNAPSHOT_CACHE[`${tabId}:${url}`];
+};
+
 async function getTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || /^(chrome|edge|about|chrome-extension):/.test(tab.url || ""))
@@ -361,7 +377,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         out = "fui para a aba [" + args.id + "]";
       } else if (tool === "olhar") {
         const tab = await getTab();
-        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 });
+        // Tenta WebP primeiro (mais compacto que JPEG), fallback para JPEG
+        let dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "webp", quality: 75 }).catch(() => null);
+        if (!dataUrl) dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 });
         out = { dataUrl };
       } else if (tool === "agora") {
         out = "Data e hora atuais: " + new Date().toLocaleString("pt-BR", { dateStyle: "full", timeStyle: "short" });
@@ -372,16 +390,22 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       } else {
         const tab = await getTab();
         if (tool === "snapshot") {
-          // estabiliza o DOM (readyState + 2 frames) antes de fotografar — como o browser-use
-          await exec(tab.id, () => new Promise((res) => {
-            const done = () => requestAnimationFrame(() => requestAnimationFrame(res));
-            if (document.readyState === "complete") return done();
-            let n = 0;
-            const t = setInterval(() => {
-              if (document.readyState === "complete" || ++n > 20) { clearInterval(t); done(); }
-            }, 50);
-          })).catch(() => {});
-          out = await exec(tab.id, snapshotFn);
+          const cached = getCachedSnapshot(tab.id, tab.url);
+          if (cached) {
+            out = cached;
+          } else {
+            // estabiliza o DOM (readyState + 2 frames) antes de fotografar — como o browser-use
+            await exec(tab.id, () => new Promise((res) => {
+              const done = () => requestAnimationFrame(() => requestAnimationFrame(res));
+              if (document.readyState === "complete") return done();
+              let n = 0;
+              const t = setInterval(() => {
+                if (document.readyState === "complete" || ++n > 20) { clearInterval(t); done(); }
+              }, 50);
+            })).catch(() => {});
+            out = await exec(tab.id, snapshotFn);
+            cacheSnapshot(tab.id, tab.url, out);
+          }
         }
         else if (tool === "formulario") out = await exec(tab.id, formFn);
         else if (tool === "preencher") out = await exec(tab.id, preencherFn, [args.campos || []]);
@@ -403,9 +427,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           try { await chrome.tabs.goBack(tab.id); } catch { out = "não há página anterior"; }
           await sleep(500); await waitLoad(tab.id, 6000);
           out = out || "voltei para a página anterior";
-        } else if (tool === "rolar") out = await exec(tab.id, scrollFn, [args.dir || "baixo"]);
-        else if (tool === "rolar_ate") { out = await exec(tab.id, scrollToTextFn, [String(args.texto ?? "")]); await sleep(400); }
-        else if (tool === "rolar_fim") { out = await exec(tab.id, scrollBottomFn); await sleep(600); }
+        } else if (tool === "rolar") {
+          out = await exec(tab.id, scrollFn, [args.dir || "baixo"]);
+          invalidateSnapshot(tab.id, tab.url);
+        }
+        else if (tool === "rolar_ate") {
+          out = await exec(tab.id, scrollToTextFn, [String(args.texto ?? "")]);
+          await sleep(400);
+          invalidateSnapshot(tab.id, tab.url);
+        }
+        else if (tool === "rolar_fim") {
+          out = await exec(tab.id, scrollBottomFn);
+          await sleep(600);
+          invalidateSnapshot(tab.id, tab.url);
+        }
         else if (tool === "ler") out = await exec(tab.id, readFn, [args.offset | 0]);
         else if (tool === "links") out = await exec(tab.id, linksFn);
         else if (tool === "hover") { out = await exec(tab.id, hoverFn, [args.i]); await sleep(400); }

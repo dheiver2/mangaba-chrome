@@ -63,17 +63,61 @@ async function mcpConnect(server) {
   return server.tools;
 }
 
-// conecta a TODOS os servidores configurados (em paralelo) e devolve o catálogo
+// LAZY LOAD: apenas descobre (não conecta) ao inicializar
+// Conexão acontece sob demanda em mcpCall, com cache de 24h
 async function mcpDiscover(cfgTxt) {
   mcpServers.clear();
+  const servers = parseMcpConfig(cfgTxt);
   const catalogo = [];
-  await Promise.all(parseMcpConfig(cfgTxt).map(async (s) => {
-    try { await mcpConnect(s); s.erro = null; }
-    catch (e) { s.erro = String(e.message || e); s.tools = []; }
-    mcpServers.set(s.nome, s);
-    catalogo.push({ nome: s.nome, tools: s.tools || [], erro: s.erro });
-  }));
+
+  // Tenta carregar cache de 24h do localStorage
+  const cacheKey = "mcpCatalogCache";
+  const cached = localStorage.getItem(cacheKey);
+  const cacheData = cached ? JSON.parse(cached) : { servers: {}, ts: 0 };
+  const cacheValid = Date.now() - cacheData.ts < 86400000; // 24h
+
+  for (const s of servers) {
+    let tools = [];
+    let erro = null;
+
+    // Se cache é válido e servidor estava conectado antes, usar cache
+    if (cacheValid && cacheData.servers[s.nome]) {
+      const cached = cacheData.servers[s.nome];
+      tools = cached.tools || [];
+      erro = cached.erro;
+    } else {
+      // Senão, servidor fica marcado como "pendente" (vai conectar on-demand)
+      s.pendente = true;
+    }
+
+    mcpServers.set(s.nome, { ...s, tools, erro });
+    catalogo.push({ nome: s.nome, tools, erro });
+  }
+
   return catalogo;
+}
+
+// Conecta um servidor específico sob demanda (chamado por mcpCall)
+async function mcpConnectOnDemand(servidor) {
+  const s = mcpServers.get(servidor);
+  if (!s || s.tools.length > 0) return; // já conectado ou cache válido
+
+  try {
+    await mcpConnect(s);
+    s.erro = null;
+    s.pendente = false;
+  } catch (e) {
+    s.erro = String(e.message || e);
+    s.tools = [];
+  }
+
+  // Atualizar cache
+  const cacheKey = "mcpCatalogCache";
+  const cacheData = { servers: {}, ts: Date.now() };
+  for (const [nome, server] of mcpServers) {
+    cacheData.servers[nome] = { tools: server.tools, erro: server.erro };
+  }
+  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
 }
 
 // catálogo em texto para injetar no prompt do agente (só quando há MCP conectado)
@@ -93,9 +137,15 @@ function mcpCatalogText(catalogo) {
 
 // executa uma ferramenta MCP e normaliza o resultado para texto
 async function mcpCall(servidor, ferramenta, argumentos) {
-  const s = mcpServers.get(servidor) || [...mcpServers.values()].find((x) => (x.tools || []).some((t) => t.name === ferramenta));
+  let s = mcpServers.get(servidor) || [...mcpServers.values()].find((x) => (x.tools || []).some((t) => t.name === ferramenta));
   if (!s) return { ok: false, error: `servidor MCP "${servidor}" não está conectado (confira as Configurações)` };
-  if (s.erro) return { ok: false, error: `servidor "${servidor}" offline: ${s.erro}` };
+
+  // Se servidor está pendente (lazy load), conectar agora
+  if (s.pendente) {
+    await mcpConnectOnDemand(s.nome);
+  }
+
+  if (s.erro) return { ok: false, error: `servidor "${s.nome}" offline: ${s.erro}` };
   try {
     const r = await mcpRpc(s, "tools/call", { name: ferramenta, arguments: argumentos || {} });
     let texto;
