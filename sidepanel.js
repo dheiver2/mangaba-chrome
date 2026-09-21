@@ -7,8 +7,8 @@ const agentHistory = []; // modo agente {task, resposta}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const DEFAULTS = {
-  url: "http://localhost:8080/v1/chat/completions",
-  model: "",
+  url: "https://mangabarouter.store/v1/chat/completions",
+  model: "Mangaba-Qwen3-Coder-30B-A3B",
   key: "",
   maxSteps: 20,
   dados: "", // dados pessoais do usuário (chave: valor por linha) — usados via {{chave}}, nunca vão ao modelo
