@@ -133,7 +133,7 @@ strings=(
   "Login Necessário:sidepanel.html"
   "pauseLogin:sidepanel.html"
   "btnLoginOK:sidepanel.html"
-  "Deadlock Detection:sidepanel.js"
+  "Deadlock detectado:sidepanel.js"
   "snapshot_segmentado:background.js"
 )
 
