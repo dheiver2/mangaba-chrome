@@ -771,18 +771,27 @@ function updateMcpStatus(cat) {
 
 // Modal de Login/2FA
 let loginResolve = null;
+let loginTimeout = null;
 
-function showLoginModal() {
+function showLoginModal(timeout = 300000) {  // 5 min padrão
   return new Promise((resolve) => {
     loginResolve = resolve;
     document.getElementById("pauseLogin").style.display = "flex";
+
+    // Timeout automático se usuário não clicar
+    loginTimeout = setTimeout(() => {
+      console.warn("⏱️ Timeout de login (5 min) — retomando agente");
+      hideLoginModal();
+      resolve(false);  // Indica que timeout ocorreu
+    }, timeout);
   });
 }
 
 function hideLoginModal() {
+  clearTimeout(loginTimeout);
   document.getElementById("pauseLogin").style.display = "none";
   if (loginResolve) {
-    loginResolve(true);
+    loginResolve(true);  // Indica que usuário clicou OK
     loginResolve = null;
   }
 }
@@ -1074,16 +1083,25 @@ async function runAgent(task) {
         statusTxt = null;
         status.textContent = "🔐 Login necessário — complete no navegador";
         box.add("🔐 Campo de senha detectado — pausando para você fazer login");
+        console.log("🔐 Login pause: esperando usuário...");
 
-        await showLoginModal();
+        const loginOk = await showLoginModal();
+        console.log("🔐 Login resumed:", loginOk ? "clique OK" : "timeout");
+
         if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" });
 
         statusTxt = `${agent.nome} · retomando pós-login`;
-        feitas.push(`usuário completou login; retomando a tarefa`);
+        feitas.push(`usuário ${loginOk ? "completou login" : "timeout de login (5min)"}; retomando a tarefa`);
         sessionStorage.removeItem("_loginAttempted");
+
         // Re-tomar o snapshot para validar login bem-sucedido
         const snapPos = await tool("snapshot", {});
-        if (snapPos?.ok) snap = snapPos.out;
+        if (snapPos?.ok) {
+          snap = snapPos.out;
+          console.log("✓ Snapshot pós-login:", snap.url, `(${snap.elements.length} elementos)`);
+        } else {
+          console.warn("⚠️ Erro ao obter snapshot pós-login:", snapPos?.error);
+        }
         return "BREAK"; // re-observar página pós-login
       }
 
@@ -1096,15 +1114,23 @@ async function runAgent(task) {
         statusTxt = null;
         status.textContent = "📞 Autenticação de 2 passos — aguardando (5 min)";
         box.add("📞 Verificação de 2 passos detectada — pausando com timeout de 5 min");
+        console.log("📞 2FA pause: esperando usuário...");
 
-        await showLoginModal();
+        const twoFaOk = await showLoginModal();
+        console.log("📞 2FA resumed:", twoFaOk ? "clique OK" : "timeout");
+
         if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" });
 
         statusTxt = `${agent.nome} · retomando pós-2fa`;
-        feitas.push(`usuário completou verificação de 2 passos`);
+        feitas.push(`usuário ${twoFaOk ? "completou 2FA" : "timeout de 2FA (5min)"}; retomando`);
         sessionStorage.removeItem("_2faAttempted");
         const snapPos = await tool("snapshot", {});
-        if (snapPos?.ok) snap = snapPos.out;
+        if (snapPos?.ok) {
+          snap = snapPos.out;
+          console.log("✓ Snapshot pós-2FA:", snap.url, `(${snap.elements.length} elementos)`);
+        } else {
+          console.warn("⚠️ Erro ao obter snapshot pós-2FA:", snapPos?.error);
+        }
         return "BREAK"; // re-observar
       }
 
