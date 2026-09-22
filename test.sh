@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # ============================================
-# TESTE COMPLETO — Mangaba Chrome v1.19.2
+# TESTE COMPLETO — Mangaba Chrome v1.19.3
 # Executar: ./test.sh
 # ============================================
 
 set -e
 
-echo "🧪 TESTE LOCAL COMPLETO — v1.19.2"
+echo "🧪 TESTE LOCAL COMPLETO — v1.19.3"
 echo "=================================="
 echo ""
 
@@ -54,10 +54,10 @@ if command -v jq &> /dev/null; then
     echo "    Nome: $NAME"
     echo "    Versão: $VERSION"
 
-    if [ "$VERSION" = "1.19.2" ]; then
-      echo "  ✅ Versão correta: 1.19.2"
+    if [ "$VERSION" = "1.19.3" ]; then
+      echo "  ✅ Versão correta: 1.19.3"
     else
-      echo "  ❌ Versão incorreta: $VERSION (esperado 1.19.2)"
+      echo "  ❌ Versão incorreta: $VERSION (esperado 1.19.3)"
       ((failed++))
     fi
   else
