@@ -989,20 +989,6 @@ async function runAgent(task) {
   };
 
   try {
-    // conecta aos servidores MCP configurados e monta o catálogo de ferramentas externas p/ o prompt
-    if (cfg.mcps && cfg.mcps.trim().split("\n").some((l) => l.trim() && !l.trim().startsWith("#"))) {
-      box.add("Conectando aos servidores MCP...");
-      try {
-        const cat = await mcpDiscover(cfg.mcps);
-        updateMcpStatus(cat);  // Atualizar UI de status MCP
-        mcpTexto = mcpCatalogText(cat);
-        const ok = cat.filter((c) => !c.erro).length;
-        const nTools = cat.reduce((n, c) => n + (c.tools?.length || 0), 0);
-        const offline = cat.filter((c) => c.erro).map((c) => c.nome);
-        box.add(`MCP: ${ok}/${cat.length} conectado(s), ${nTools} ferramenta(s)${offline.length ? ` — offline: ${offline.join(", ")}` : ""}`);
-      } catch (e) { box.add("MCP: falha ao conectar — " + String(e.message || e).slice(0, 60)); }
-    }
-
     // detecta tarefa com N itens ("comente 10 posts", "curta 3 vídeos") p/ decompor e rastrear progresso
     const nums = (task.match(/\b\d{1,3}\b/g) || []).map(Number);
     const meta = nums.length ? Math.min(50, Math.max(...nums)) : 0;
@@ -1011,24 +997,45 @@ async function runAgent(task) {
     // pro agente — evita o planejador ALUCINAR um fluxo que o usuário não pediu.
     const palavras = task.trim().split(/\s+/).length;
     const precisaPlano = meta >= 2 || palavras >= 12;
-    let plano = [];
-    if (precisaPlano) try {
-      const p = parseAction(await llm([
-        { role: "system", content: 'Você é o planejador da Mangaba AI. Gere um plano CURTO e REALISTA (2 a 4 passos) usando SÓ o que a tarefa literalmente pede. NUNCA invente etapas, cadastros, convites ou contas que o usuário não mencionou. Se a tarefa for ambígua/incompleta, o plano deve ser exatamente ["perguntar ao usuário o que ele quer"]. Se tiver vários itens (ex.: "10 perfis"), inclua "repetir para cada um dos N". Cada passo é uma STRING. Responda SOMENTE JSON: {"plano":["passo 1"]}' },
-        { role: "user", content: task }
-      ], 250, null, updateRetryStatus));
-      const achata = (x) => Array.isArray(x) ? x.flatMap(achata)
-        : (x && typeof x === "object") ? Object.values(x).flatMap(achata) : [String(x)];
-      if (p?.plano) plano = achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4);
-    } catch { /* plano é opcional */ }
+    const sel = $("agentSel")?.value || "auto";
+    const temMcps = cfg.mcps && cfg.mcps.trim().split("\n").some((l) => l.trim() && !l.trim().startsWith("#"));
+
+    // MCP discovery, plano e escolha de agente são 3 chamadas de rede independentes — rodar em
+    // paralelo evita somar seus tempos (cada chamada ao LLM pode levar bastante em modelos maiores)
+    // antes do passo 1 nem aparecer.
+    if (temMcps) box.add("Conectando aos servidores MCP...");
+    statusTxt = precisaPlano && sel === "auto" ? "Planejando e escolhendo o agente"
+      : precisaPlano ? "Planejando" : sel === "auto" ? "Escolhendo o agente" : statusTxt;
+    const [, plano, agent] = await Promise.all([
+      (async () => {
+        if (!temMcps) return;
+        try {
+          const cat = await mcpDiscover(cfg.mcps);
+          updateMcpStatus(cat);  // Atualizar UI de status MCP
+          mcpTexto = mcpCatalogText(cat);
+          const ok = cat.filter((c) => !c.erro).length;
+          const nTools = cat.reduce((n, c) => n + (c.tools?.length || 0), 0);
+          const offline = cat.filter((c) => c.erro).map((c) => c.nome);
+          box.add(`MCP: ${ok}/${cat.length} conectado(s), ${nTools} ferramenta(s)${offline.length ? ` — offline: ${offline.join(", ")}` : ""}`);
+        } catch (e) { box.add("MCP: falha ao conectar — " + String(e.message || e).slice(0, 60)); }
+      })(),
+      (async () => {
+        if (!precisaPlano) return [];
+        try {
+          const p = parseAction(await llm([
+            { role: "system", content: 'Você é o planejador da Mangaba AI. Gere um plano CURTO e REALISTA (2 a 4 passos) usando SÓ o que a tarefa literalmente pede. NUNCA invente etapas, cadastros, convites ou contas que o usuário não mencionou. Se a tarefa for ambígua/incompleta, o plano deve ser exatamente ["perguntar ao usuário o que ele quer"]. Se tiver vários itens (ex.: "10 perfis"), inclua "repetir para cada um dos N". Cada passo é uma STRING. Responda SOMENTE JSON: {"plano":["passo 1"]}' },
+            { role: "user", content: task }
+          ], 250, null, updateRetryStatus));
+          const achata = (x) => Array.isArray(x) ? x.flatMap(achata)
+            : (x && typeof x === "object") ? Object.values(x).flatMap(achata) : [String(x)];
+          return p?.plano ? achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4) : [];
+        } catch { return []; /* plano é opcional */ }
+      })(),
+      sel !== "auto" ? (AGENTS.find((a) => a.id === sel) || UNIFIED) : pickAgent(task)
+    ]);
+
     if (plano.length) box.add("Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
     if (meta >= 2) box.add(`Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
-
-    // agente: manual (dropdown) ou, no Automático, o Orquestrador escolhe (com viés seguro p/ o "faz tudo")
-    const sel = $("agentSel")?.value || "auto";
-    let agent;
-    if (sel !== "auto") agent = AGENTS.find((a) => a.id === sel) || UNIFIED;
-    else { statusTxt = "Escolhendo o agente"; agent = await pickAgent(task); }
     box.add(`${agent.nome} assumiu a tarefa${sel === "auto" && agent.id !== "mangaba" ? " (escolhido automaticamente)" : ""}`);
 
     const NAVEGA = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "clicar", "clicar_texto", "tecla", "curtir"];
