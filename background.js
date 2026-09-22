@@ -412,6 +412,30 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const id = +args.id;
         if (!id) out = "informe o id da aba (use listar_abas primeiro)";
         else { await chrome.tabs.remove(id); out = "fechei a aba [" + id + "]"; }
+      } else if (tool === "ler_varias") {
+        // lê várias URLs em paralelo (comparar fontes): cada uma abre em aba própria (sem
+        // roubar foco), lê o texto, e a aba fecha — nada disso depende da aba ativa.
+        const urls = (Array.isArray(args.urls) ? args.urls : []).filter((u) => /^https?:\/\//.test(u)).slice(0, 4);
+        if (!urls.length) {
+          out = "informe args.urls como lista de 2 a 4 URLs (http/https)";
+        } else {
+          const resultados = await Promise.all(urls.map(async (url) => {
+            let nt;
+            try {
+              nt = await chrome.tabs.create({ url, active: false });
+              await waitLoad(nt.id, 10000);
+              const texto = await exec(nt.id, () => (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 4000));
+              return { url, texto };
+            } catch (e) {
+              return { url, erro: String(e.message || e).slice(0, 120) };
+            } finally {
+              if (nt?.id) chrome.tabs.remove(nt.id).catch(() => {});
+            }
+          }));
+          out = resultados.map((r, i) =>
+            `--- Fonte ${i + 1}: ${r.url} ---\n${r.erro ? `ERRO: ${r.erro}` : r.texto}`
+          ).join("\n\n");
+        }
       } else {
         const tab = await getTab();
         if (tool === "snapshot") {

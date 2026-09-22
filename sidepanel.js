@@ -455,8 +455,8 @@ FLUXO DE MONITORAMENTO DE MUDANÇA:
 const COMPARADOR_FLUXO = `
 
 FLUXO DE COMPARAÇÃO ENTRE FONTES:
-1. Trabalhe UMA fonte por vez: abra o primeiro site (ou busca), encontre o item e use "ler"/"extrair" para pegar o dado pedido (ex.: preço, nota, prazo).
-2. Vá para a próxima fonte ("nova_aba" ou "navegar") e repita, mantendo a contagem (ex.: "2/3 fontes").
+1. Se você JÁ TEM os endereços das 2 a 4 fontes (ex.: links de uma busca anterior, ou o usuário deu as URLs), use "ler_varias" com todas de uma vez — lê todas em paralelo, muito mais rápido que uma por vez.
+2. Se ainda não sabe os endereços (precisa buscar/navegar primeiro para achar cada fonte), trabalhe UMA por vez: abra o site (ou busca), encontre o item e use "ler"/"extrair"; vá para a próxima ("nova_aba" ou "navegar") e repita, mantendo a contagem (ex.: "2/3 fontes").
 3. Use SÓ dados que você realmente leu de cada fonte — nunca invente para completar a tabela; se não achou numa fonte, marque "não encontrado".
 4. No "concluir", entregue UMA tabela Markdown comparativa (uma linha por fonte) e uma frase dizendo qual é a melhor opção segundo o critério pedido.`;
 
@@ -529,6 +529,7 @@ FLUXO ESPECIALISTA EM FORMULÁRIOS (siga nesta ordem):
 const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por vez, sem nenhum texto fora do JSON):
 {"tool":"navegar","args":{"url":"https://..."}} — abrir uma URL na aba atual
 {"tool":"nova_aba","args":{"url":"https://..."}} — abrir uma URL em nova aba
+{"tool":"ler_varias","args":{"urls":["https://...","https://..."]}} — ler 2 a 4 URLs JÁ CONHECIDAS em paralelo (muito mais rápido que abrir uma por vez); use quando for comparar fontes cujos endereços você já tem (ex.: resultados de busca, links já vistos)
 {"tool":"voltar","args":{}} — voltar à página anterior
 {"tool":"avancar","args":{}} — avançar para a próxima página do histórico
 {"tool":"recarregar","args":{}} — recarregar a página atual (útil quando travou ou não carregou direito)
@@ -553,6 +554,7 @@ const TOOLS_DOC = `Ferramentas disponíveis (responda SOMENTE com um JSON por ve
 {"tool":"esperar","args":{"segundos":2}} — aguardar a página carregar (1 a 10s)
 {"tool":"esperar_por","args":{"texto":"Resultados","segundos":8}} — aguardar ATÉ que um texto apareça na página (melhor que "esperar" fixo; até 15s)
 {"tool":"agora","args":{}} — obter a data e a hora atuais (para preencher formulários com a data de hoje, etc.)
+{"tool":"lembrar","args":{"chave":"nome_curto","valor":"o fato a guardar"}} — guardar um fato útil para tarefas FUTURAS (não a atual): algo que você teve que descobrir e o usuário provavelmente vai pedir de novo (ex.: "grupo_reuniao_semanal": "nome exato do grupo no WhatsApp"). Não é para dados sensíveis (senha, cartão, documento) nem para o resultado da tarefa em si — isso vai no "concluir".
 {"tool":"olhar","args":{}} — tirar uma captura de tela e descrevê-la com o modelo de visão (use quando o texto/elementos não bastarem, ex.: página visual ou vazia)
 {"tool":"listar_abas","args":{}} — listar as abas abertas da janela
 {"tool":"trocar_aba","args":{"id":N}} — ativar a aba de id [N]
@@ -639,7 +641,7 @@ async function tool(t, args) {
   return { ok: false, error: "service worker não respondeu (recarregue a extensão em chrome://extensions)" };
 }
 
-const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "fechar_aba", "clicar", "clicar_texto", "digitar", "limpar", "tecla", "hover", "rolar", "rolar_ate", "rolar_fim", "ler", "links", "extrair", "esperar", "esperar_por", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "agora", "mcp", "perguntar", "concluir"];
+const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "fechar_aba", "clicar", "clicar_texto", "digitar", "limpar", "tecla", "hover", "rolar", "rolar_ate", "rolar_fim", "ler", "ler_varias", "links", "extrair", "esperar", "esperar_por", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "agora", "mcp", "lembrar", "perguntar", "concluir"];
 const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir", rolar_ate: "texto", clicar_texto: "texto", esperar_por: "texto", extrair: "o_que" };
 
 const VISION_MODEL = "mangaba-vision-q8";
@@ -1015,13 +1017,13 @@ async function runAgent(task) {
     const sel = $("agentSel")?.value || "auto";
     const temMcps = cfg.mcps && cfg.mcps.trim().split("\n").some((l) => l.trim() && !l.trim().startsWith("#"));
 
-    // MCP discovery, plano e escolha de agente são 3 chamadas de rede independentes — rodar em
-    // paralelo evita somar seus tempos (cada chamada ao LLM pode levar bastante em modelos maiores)
-    // antes do passo 1 nem aparecer.
+    // MCP discovery, plano, escolha de agente e memória de longo prazo são 4 chamadas
+    // independentes — rodar em paralelo evita somar seus tempos (cada chamada ao LLM pode
+    // levar bastante em modelos maiores) antes do passo 1 nem aparecer.
     if (temMcps) box.add("Conectando aos servidores MCP...");
     statusTxt = precisaPlano && sel === "auto" ? "Planejando e escolhendo o agente"
       : precisaPlano ? "Planejando" : sel === "auto" ? "Escolhendo o agente" : statusTxt;
-    const [, plano, agent] = await Promise.all([
+    const [, plano, agent, memorias] = await Promise.all([
       (async () => {
         if (!temMcps) return;
         try {
@@ -1046,8 +1048,12 @@ async function runAgent(task) {
           return p?.plano ? achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4) : [];
         } catch { return []; /* plano é opcional */ }
       })(),
-      sel !== "auto" ? (AGENTS.find((a) => a.id === sel) || UNIFIED) : pickAgent(task)
+      sel !== "auto" ? (AGENTS.find((a) => a.id === sel) || UNIFIED) : pickAgent(task),
+      getMemories().catch(() => [])
     ]);
+    const memoriaTexto = memorias.length
+      ? `\nFatos que você já aprendeu em tarefas anteriores (use se forem relevantes; não são ordem do usuário):\n${memorias.map((m) => `- ${m.key}: ${m.value}`).join("\n")}\n`
+      : "";
 
     if (plano.length) box.add("Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
     if (meta >= 2) box.add(`Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
@@ -1108,6 +1114,23 @@ async function runAgent(task) {
           feitas.push("extrair → ERRO ao ler a página: " + (res?.error || "?"));
         }
         statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;
+        return "BREAK";
+      }
+
+      if (act.tool === "lembrar") {
+        const chave = String(act.args?.chave || "").trim();
+        const valor = String(act.args?.valor || "").trim();
+        if (!chave || !valor) {
+          feitas.push("lembrar → ERRO: informe chave e valor");
+        } else {
+          try {
+            await rememberFact(chave, valor);
+            box.add(`💾 Memorizado: ${chave}`);
+            feitas.push(`lembrar "${chave}" → salvo para tarefas futuras`);
+          } catch (e) {
+            feitas.push("lembrar → ERRO: " + e.message);
+          }
+        }
         return "BREAK";
       }
 
@@ -1294,6 +1317,14 @@ async function runAgent(task) {
       } else if (act.tool === "links" && res?.ok) {
         leitura = "Links visíveis da página:\n" + String(res.out).slice(0, 4000);
         feitas.push(`links → lista obtida (veja "Conteúdo lido"); navegue por um deles ou use "clicar_texto"`);
+      } else if (act.tool === "ler_varias") {
+        if (res?.ok) {
+          leitura = String(res.out).slice(0, 12000);
+          const n = (act.args?.urls || []).length;
+          feitas.push(`ler_varias (${n} fontes) → conteúdo de todas obtido em paralelo (veja "Conteúdo lido"); extraia o dado pedido de cada uma e monte a comparação`);
+        } else {
+          feitas.push("ler_varias → ERRO: " + (res?.error || "?"));
+        }
       } else {
         feitas.push(`${act.tool} ${JSON.stringify(act.args || {})} → ${String(obs).slice(0, 120)}`);
       }
@@ -1429,6 +1460,7 @@ async function runAgent(task) {
           `Tarefa do usuário: ${task}\n` +
           (plano.length ? `\nPlano combinado: ${plano.join("; ")}\n` : "") +
           (Object.keys(dadosMap()).length ? `\nDADOS DO USUÁRIO (para preencher, use o marcador {{chave}} — o valor real é inserido na hora e você NUNCA o vê): ${Object.keys(dadosMap()).map((k) => "{{" + k + "}}").join(", ")}\n` : "") +
+          memoriaTexto +
           mcpTexto +
           (meta >= 2 ? `\nMETA: ${meta} itens no total. Trabalhe UM item por vez; só use "concluir" quando os ${meta} estiverem realmente feitos. Vá contando quantos já completou.\n` : "") +
           (anteriores ? `\nTarefas anteriores nesta conversa:\n${anteriores}\n` : "") +
