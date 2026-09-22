@@ -305,11 +305,13 @@ function classificaErro(status, body) {
 
 // chamada não-streaming com retry exponencial (usada pelos agentes)
 // statusCallback: fn(tentativa, maxTentativas, atraso) para atualizar UI
-async function llm(messages, maxTokens = 700, signal, statusCallback) {
+async function llm(messages, maxTokens = 700, signal, statusCallback, responseFormat) {
   signal = signal || (agentRun && agentRun.abort && agentRun.abort.signal);
 
-  // Verifica cache antes de chamar gateway
-  const cached = getCachedResponse(cfg.model, messages);
+  // Verifica cache antes de chamar gateway (inclui responseFormat na chave — mesmas
+  // messages com schemas diferentes não podem reaproveitar a resposta uma da outra)
+  const cacheKeyMessages = responseFormat ? [...messages, { role: "__jev__", content: JSON.stringify(responseFormat) }] : messages;
+  const cached = getCachedResponse(cfg.model, cacheKeyMessages);
   if (cached) return cached;
 
   const headers = gatewayHeaders();
@@ -328,7 +330,10 @@ async function llm(messages, maxTokens = 700, signal, statusCallback) {
         method: "POST",
         headers,
         signal,
-        body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0, cache_prompt: true })
+        body: JSON.stringify({
+          model: cfg.model, messages, max_tokens: maxTokens, temperature: 0, cache_prompt: true,
+          ...(responseFormat ? { response_format: responseFormat } : {})
+        })
       }, 30000);  // 30s timeout individual por tentativa
       if (!resp.ok) {
         const c = classificaErro(resp.status, (await resp.text()).slice(0, 300));
@@ -336,7 +341,7 @@ async function llm(messages, maxTokens = 700, signal, statusCallback) {
         throw new Error((ult = c.msg));
       }
       const result = (await resp.json()).choices?.[0]?.message?.content || "";
-      cacheResponse(cfg.model, messages, result);
+      cacheResponse(cfg.model, cacheKeyMessages, result);
       return result;
     } catch (e) {
       if (e.name === "AbortError") throw e; // parada do usuário
@@ -710,17 +715,27 @@ function fmtSnapshot(s, prevKeys) {
 const routeCache = new Map(); // tarefa → agente escolhido (evita chamada repetida ao orquestrador)
 // roteamento do modo Automático: escolhe entre o agente "faz tudo" (padrão seguro) e os especialistas.
 // Na dúvida cai em UNIFIED — evita mandar tarefa genérica p/ um especialista que restringe o fluxo.
+// escolher o agente é uma decisão enum simples (não gera texto) — schema compatível com o
+// otimizador de decisão do gateway (JEV/TypeSafe via response_format.json_schema): quando a
+// conta tem um provedor de decisão configurado, o roteador responde em ~200ms em vez de
+// esperar o modelo de chat completo; se não tiver, ele mesmo cai no modelo normal sem o
+// cliente perceber diferença — nenhum risco de regressão em gateways sem esse recurso.
 async function pickAgent(task) {
   const key = task.toLowerCase().trim().slice(0, 120);
   if (routeCache.has(key)) return routeCache.get(key);
   const cands = [UNIFIED, ...AGENTS];
   const lista = cands.map((a) => `${a.id}: ${a.desc}`).join("\n");
+  const schemaEscolha = {
+    type: "object",
+    properties: { agente: { type: "string", enum: cands.map((a) => a.id) } },
+    required: ["agente"]
+  };
   let ag = UNIFIED;
   try {
     const raw = await llm([
       { role: "system", content: "Você é o Orquestrador da Mangaba AI. Escolha o agente mais adequado para a tarefa. Se a tarefa for genérica, mista ou você tiver dúvida, escolha \"mangaba\" (faz tudo). Responda SOMENTE com JSON: {\"agente\":\"id\"}." },
       { role: "user", content: `Agentes:\n${lista}\n\nTarefa: ${task}` }
-    ], 60);
+    ], 60, null, null, { type: "json_schema", json_schema: { name: "escolha_agente", schema: schemaEscolha } });
     const id = parseAction(raw)?.agente;
     ag = cands.find((a) => a.id === id) || UNIFIED;
   } catch (e) {
