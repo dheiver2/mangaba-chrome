@@ -1,0 +1,28 @@
+{
+  "name": "mangaba-chrome",
+  "version": "1.19.0",
+  "description": "Assistente brasileira no navegador com agentes de IA autônomos",
+  "scripts": {
+    "build": "bash build.sh prod",
+    "build:dev": "bash build.sh dev",
+    "build:watch": "nodemon --watch '*.js' --watch '*.html' --watch '*.css' -e js,html,css --exec 'npm run build:dev'",
+    "test": "echo 'Testes em desenvolvimento'",
+    "lint": "eslint '*.js' --fix 2>/dev/null || echo 'ESLint não instalado'"
+  },
+  "devDependencies": {
+    "terser": "^5.24.0",
+    "cleancss": "^5.3.2",
+    "html-minifier": "^4.0.0",
+    "eslint": "^8.50.0",
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "chrome-extension",
+    "ai-agent",
+    "browser-automation",
+    "mangaba"
+  ],
+  "author": "Dheiver",
+  "license": "PROPRIETARY",
+  "private": true
+}
