@@ -707,8 +707,10 @@ function updateRetryStatus(tentativa, max, proximoAtraso) {
   currentStatusElement.textContent = `🔄 Processando · Retry ${tentativa}/${max} · aguardando ${segundosAtraso}s`;
 }
 
-const SENSITIVE_CLICK = /comprar|pagar|pagamento|checkout|finalizar|enviar|send|publicar|postar|post|tweet|responder|reply|compartilhar|share|excluir|apagar|deletar|remover|delete|assinar|transferir|confirmar|entrar|login|log ?in|sign ?in/i;
-const SENSITIVE_FIELD = /senha|password|cart[ãa]o|cvv|cpf|cnpj|\brg\b|c[óo]digo|token|2fa|otp|pin/i;
+const SENSITIVE_CLICK = /comprar|pagar|pagamento|checkout|finalizar|enviar|send|publicar|postar|post|tweet|responder|reply|compartilhar|share|excluir|apagar|deletar|remover|delete|assinar|transferir|confirmar|entrar|login|log ?in|sign ?in|confirmar|validar|verificar/i;
+const SENSITIVE_FIELD = /senha|password|cart[ãa]o|cvv|cpf|cnpj|\brg\b|c[óo]digo|token|2fa|otp|pin|c[óo]digo de verifica[çc][ãa]o|c[óo]digo .{0,10}f?fa/i;
+const DETECT_LOGIN = /login|entrar|acesso|autentica/i;
+const DETECT_2FA = /verifica.{0,10}passos|2.?fa|otp|c[óo]digo|autentica.{0,10}dupla|dois fatores|two.?factor|google authenticator|sms|email.*verifica|verifica.{0,10}email/i;
 // ferramenta MCP cujo nome sugere efeito colateral/mutação → confirmar antes de executar (leitura/consulta não precisa)
 const MCP_MUTAVEL = /create|delete|remove|update|write|send|post|put|patch|upload|publish|merge|push|pay|transfer|execute|run|invoke|criar|apagar|excluir|enviar|escrever|publicar|deletar|remover|atualizar/i;
 
@@ -984,10 +986,56 @@ async function runAgent(task) {
         return "BREAK";
       }
 
-      // confirmação humana para ações sensíveis
-      // clicar_texto não tem índice: o próprio texto pedido é o rótulo p/ a checagem de sensibilidade
+      // ---- LOGIN/2FA AUTOMÁTICO: Detectar e pausar ----
       const label = act.tool === "clicar_texto" ? String(act.args?.texto || "") : elLabel(snap, act.args?.i);
       const rotuloForm = (i) => (form.match(new RegExp(`^\\[${i}\\][^"]*"([^"]*)"`, "m"))?.[1]) || elLabel(snap, i);
+
+      // Detectar campo password — PAUSA AUTOMÁTICA
+      const isPasswordField = (act.tool === "digitar" || act.tool === "preencher") &&
+        (act.tool === "preencher" ? (act.args?.campos || []).some((c) => /senha|password/i.test(rotuloForm(c.i)))
+         : /senha|password/i.test(label));
+
+      if (isPasswordField && !sessionStorage.getItem("_loginAttempted")) {
+        sessionStorage.setItem("_loginAttempted", "1");
+        statusTxt = null;
+        status.textContent = "🔐 Login necessário — complete no navegador";
+        box.add("🔐 Campo de senha detectado — pausando para você fazer login");
+
+        const resposta = await askUser("Apareça um campo de senha. Complete o login (incluindo 2FA se necessário) no navegador e me avise aqui quando terminar.");
+        if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" });
+
+        statusTxt = `${agent.nome} · retomando pós-login`;
+        feitas.push(`usuário completou login; retomando a tarefa`);
+        sessionStorage.removeItem("_loginAttempted");
+        // Re-tomar o snapshot para validar login bem-sucedido
+        const snapPos = await tool("snapshot", {});
+        if (snapPos?.ok) snap = snapPos.out;
+        return "BREAK"; // re-observar página pós-login
+      }
+
+      // Detectar 2FA — PAUSA COM TIMEOUT
+      // Buscar em URL, título e textos visíveis
+      const pageContent2FA = snap ? (snap.url + " " + (snap.title || "") + " " + (snap.text || "").slice(0, 500)) : "";
+      const is2FAPrompt = DETECT_2FA.test(pageContent2FA);
+      if (is2FAPrompt && !sessionStorage.getItem("_2faAttempted")) {
+        sessionStorage.setItem("_2faAttempted", "1");
+        statusTxt = null;
+        status.textContent = "📞 Autenticação de 2 passos — aguardando (5 min)";
+        box.add("📞 Verificação de 2 passos detectada — pausando com timeout de 5 min");
+
+        const resposta = await askUser("Apareça uma verificação de 2 passos (SMS, email, app). Complete no navegador. Você tem 5 minutos.");
+        if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" });
+
+        statusTxt = `${agent.nome} · retomando pós-2fa`;
+        feitas.push(`usuário completou verificação de 2 passos`);
+        sessionStorage.removeItem("_2faAttempted");
+        const snapPos = await tool("snapshot", {});
+        if (snapPos?.ok) snap = snapPos.out;
+        return "BREAK"; // re-observar
+      }
+
+      // confirmação humana para ações sensíveis
+      // clicar_texto não tem índice: o próprio texto pedido é o rótulo p/ a checagem de sensibilidade
       // envio de mensagem/comentário detectado pela AÇÃO+rótulo (não pelo agente) — publicar sempre confirma
       // só é ENVIO se já houver texto digitado — abrir/ativar o campo ("Adicionar um comentário") não deve pedir confirmação
       const ehEnvioMsg = !!ultimoTexto
