@@ -35,9 +35,12 @@ const DEFAULTS = {
   model: "Mangaba-Qwen3-Coder-30B-A3B",
   key: "",
   maxSteps: 20,
-  maxTimeout: 300,  // 5 min padrão (em segundos), configurável até 600s (10 min)
-  dados: "", // dados pessoais do usuário (chave: valor por linha) — usados via {{chave}}, nunca vão ao modelo
-  // servidores MCP (nome | url | auth). Padrão: 2 públicos e SOMENTE-LEITURA (docs de repos/bibliotecas). Edite/remova à vontade.
+  maxTimeout: 300,  // 5 min padrão
+  temperature: 0,   // 0 = determinístico, 1 = criativo
+  maxTokens: 700,   // resposta máxima
+  systemPrompt: "", // customizável
+  offlineMode: false,
+  dados: "",
   mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
 };
 let cfg = { ...DEFAULTS };
@@ -48,7 +51,11 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgModel").value = cfg.model;
   $("cfgKey").value = cfg.key;
   $("cfgSteps").value = cfg.maxSteps;
-  $("cfgTimeout").value = cfg.maxTimeout || 300;  // 5 min padrão
+  $("cfgTimeout").value = cfg.maxTimeout || 300;
+  $("cfgOffline").checked = cfg.offlineMode || false;
+  $("cfgTemperature").value = cfg.temperature ?? 0;
+  $("cfgMaxTokens").value = cfg.maxTokens ?? 700;
+  $("cfgSystemPrompt").value = cfg.systemPrompt || "";
   $("cfgDados").value = cfg.dados || "";
   $("cfgMcps").value = cfg.mcps ?? DEFAULTS.mcps;
 });
@@ -126,12 +133,25 @@ $("btnSave").onclick = () => {
     model: $("cfgModel").value.trim(),
     key: $("cfgKey").value.trim(),
     maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20)),
-    maxTimeout: Math.min(600, Math.max(60, parseInt($("cfgTimeout").value) || 300)),  // 60s-10min
+    maxTimeout: Math.min(600, Math.max(60, parseInt($("cfgTimeout").value) || 300)),
+    temperature: Math.min(1, Math.max(0, parseFloat($("cfgTemperature").value) || 0)),
+    maxTokens: Math.min(4000, Math.max(100, parseInt($("cfgMaxTokens").value) || 700)),
+    systemPrompt: $("cfgSystemPrompt").value.trim(),
+    offlineMode: $("cfgOffline").checked,
     dados: $("cfgDados").value.trim(),
     mcps: $("cfgMcps").value.trim()
   };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
+
+  // Ativar/desativar modo offline
+  if (cfg.offlineMode) {
+    toggleOfflineMode(true).catch(e => {
+      addMsg("assistant").textContent = "❌ Modo offline indisponível: " + e.message;
+      cfg.offlineMode = false;
+    });
+  }
+
   warmup();
 };
 

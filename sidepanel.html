@@ -27,6 +27,21 @@
   <label>Timeout da tarefa em segundos (60–600, padrão 300 = 5 min)
     <input id="cfgTimeout" type="number" min="60" max="600" value="300" step="60">
   </label>
+  <hr>
+  <h3>⚙️ Avançado</h3>
+  <label>Modo Offline (llama.cpp em localhost:8778)
+    <input id="cfgOffline" type="checkbox"> Ativar (agente local, sem gateway)
+  </label>
+  <label>Temperatura do modelo (criatividade: 0.0–1.0, padrão 0.0)
+    <input id="cfgTemperature" type="number" min="0" max="1" step="0.1" value="0">
+  </label>
+  <label>Max tokens por resposta (100–4000, padrão 700)
+    <input id="cfgMaxTokens" type="number" min="100" max="4000" value="700" step="100">
+  </label>
+  <label>System prompt customizado (deixe vazio para padrão)
+    <textarea id="cfgSystemPrompt" rows="3" placeholder="(opcional)"></textarea>
+  </label>
+  <hr>
   <label>Meus dados (chave: valor — use como {{chave}}; nunca vão ao modelo)
     <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
   </label>
@@ -71,6 +86,7 @@
 </footer>
 
 <script src="db.js"></script>
+<script src="offline.js"></script>
 <script src="mcp.js"></script>
 <script src="sidepanel.js"></script>
 </body>
