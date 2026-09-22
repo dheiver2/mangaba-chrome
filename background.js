@@ -2,20 +2,39 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ---- CACHE DE SNAPSHOTS (30s TTL) ----
+// ---- CACHE DE SNAPSHOTS (60s TTL, multi-tab com session) ----
 const SNAPSHOT_CACHE = {};
-const cacheSnapshot = (tabId, url, data) => {
-  SNAPSHOT_CACHE[`${tabId}:${url}`] = { data, ts: Date.now() };
+const SNAPSHOT_TTL = 60000; // 60s (configurável)
+
+// Obter session hash da página (localStorage ou meta tag)
+const getSessionHash = async (tabId) => {
+  try {
+    return await exec(tabId, () => {
+      const stored = localStorage.getItem("__auth_token") || localStorage.getItem("session") || "";
+      const meta = document.querySelector('meta[name="csrf-token"]')?.content || "";
+      const hash = (stored + meta).substring(0, 20);
+      return hash || "nosession";
+    }).catch(() => "nosession");
+  } catch { return "nosession"; }
 };
-const getCachedSnapshot = (tabId, url) => {
-  const key = `${tabId}:${url}`;
+
+const cacheSnapshot = (tabId, url, sessionId, data) => {
+  const key = `${tabId}:${url}:${sessionId}`;
+  SNAPSHOT_CACHE[key] = { data, ts: Date.now() };
+};
+
+const getCachedSnapshot = async (tabId, url) => {
+  const sessionId = await getSessionHash(tabId);
+  const key = `${tabId}:${url}:${sessionId}`;
   const cached = SNAPSHOT_CACHE[key];
-  if (cached && Date.now() - cached.ts < 30000) return cached.data;
+  if (cached && Date.now() - cached.ts < SNAPSHOT_TTL) return cached.data;
   delete SNAPSHOT_CACHE[key];
   return null;
 };
-const invalidateSnapshot = (tabId, url) => {
-  delete SNAPSHOT_CACHE[`${tabId}:${url}`];
+
+const invalidateSnapshot = async (tabId, url) => {
+  const sessionId = await getSessionHash(tabId);
+  delete SNAPSHOT_CACHE[`${tabId}:${url}:${sessionId}`];
 };
 
 async function getTab() {
@@ -42,24 +61,30 @@ const snapshotFn = () => {
   const SEL = 'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
   const cands = [];
   let varridos = 0;
+  // Limites expandidos para sites densos (planilhas, tabelas, formulários grandes)
+  const MAX_CANDIDATES = 180;  // 160 → 180
+  const MAX_TRAVERSALS = 5000;
+
   const walk = (root) => {
-    if (!root || cands.length >= 160 || varridos > 5000) return;
+    if (!root || cands.length >= MAX_CANDIDATES || varridos > MAX_TRAVERSALS) return;
     for (const el of root.querySelectorAll(SEL)) {
-      if (cands.length >= 160) break;
+      if (cands.length >= MAX_CANDIDATES) break;
       if (vis(el)) cands.push(el);
     }
     for (const el of root.querySelectorAll("*")) {
-      if (cands.length >= 160 || ++varridos > 5000) break;
+      if (cands.length >= MAX_CANDIDATES || ++varridos > MAX_TRAVERSALS) break;
       if (el.shadowRoot) walk(el.shadowRoot);
       else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
     }
   };
   walk(document);
-  // PRIORIZA o que está na viewport: após rolar até os comentários, o campo entra na lista dos 45
+  // PRIORIZA o que está na viewport: após rolar até os comentários, o campo entra na lista dos 80 visíveis
+  const VIEWPORT_LIMIT = 80;   // 45 → 80 elementos na viewport
+  const OFFSCREEN_LIMIT = 80;  // +80 elementos fora da viewport
   const emTela = (el) => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
   const els = [];
-  for (const el of cands) if (els.length < 45 && emTela(el)) els.push(el);
-  for (const el of cands) if (els.length < 45 && !emTela(el)) els.push(el);
+  for (const el of cands) if (els.length < VIEWPORT_LIMIT && emTela(el)) els.push(el);
+  for (const el of cands) if (els.length < VIEWPORT_LIMIT + OFFSCREEN_LIMIT && !emTela(el)) els.push(el);
   window.__mgbEls = els;
   const alt = Math.max(1, document.documentElement.scrollHeight);
   return {
@@ -79,7 +104,7 @@ const snapshotFn = () => {
         naTela: r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
       };
     }),
-    trecho: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 700)
+    trecho: (document.body?.innerText || "").replace(/\s+/g, " ").slice(0, 1000)  // 700 → 1000 chars
   };
 };
 // Mapa detalhado do formulário. Usa o MESMO percurso do snapshot para que os
@@ -390,7 +415,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       } else {
         const tab = await getTab();
         if (tool === "snapshot") {
-          const cached = getCachedSnapshot(tab.id, tab.url);
+          const cached = await getCachedSnapshot(tab.id, tab.url);
           if (cached) {
             out = cached;
           } else {
@@ -404,7 +429,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
               }, 50);
             })).catch(() => {});
             out = await exec(tab.id, snapshotFn);
-            cacheSnapshot(tab.id, tab.url, out);
+            const sessionId = await getSessionHash(tab.id);
+            cacheSnapshot(tab.id, tab.url, sessionId, out);
           }
         }
         else if (tool === "formulario") out = await exec(tab.id, formFn);
@@ -429,17 +455,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           out = out || "voltei para a página anterior";
         } else if (tool === "rolar") {
           out = await exec(tab.id, scrollFn, [args.dir || "baixo"]);
-          invalidateSnapshot(tab.id, tab.url);
+          await invalidateSnapshot(tab.id, tab.url);
         }
         else if (tool === "rolar_ate") {
           out = await exec(tab.id, scrollToTextFn, [String(args.texto ?? "")]);
           await sleep(400);
-          invalidateSnapshot(tab.id, tab.url);
+          await invalidateSnapshot(tab.id, tab.url);
         }
         else if (tool === "rolar_fim") {
           out = await exec(tab.id, scrollBottomFn);
           await sleep(600);
-          invalidateSnapshot(tab.id, tab.url);
+          await invalidateSnapshot(tab.id, tab.url);
         }
         else if (tool === "ler") out = await exec(tab.id, readFn, [args.offset | 0]);
         else if (tool === "links") out = await exec(tab.id, linksFn);

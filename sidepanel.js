@@ -35,6 +35,7 @@ const DEFAULTS = {
   model: "Mangaba-Qwen3-Coder-30B-A3B",
   key: "",
   maxSteps: 20,
+  maxTimeout: 300,  // 5 min padrão (em segundos), configurável até 600s (10 min)
   dados: "", // dados pessoais do usuário (chave: valor por linha) — usados via {{chave}}, nunca vão ao modelo
   // servidores MCP (nome | url | auth). Padrão: 2 públicos e SOMENTE-LEITURA (docs de repos/bibliotecas). Edite/remova à vontade.
   mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
@@ -47,6 +48,7 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgModel").value = cfg.model;
   $("cfgKey").value = cfg.key;
   $("cfgSteps").value = cfg.maxSteps;
+  $("cfgTimeout").value = cfg.maxTimeout || 300;  // 5 min padrão
   $("cfgDados").value = cfg.dados || "";
   $("cfgMcps").value = cfg.mcps ?? DEFAULTS.mcps;
 });
@@ -80,6 +82,7 @@ $("btnSave").onclick = () => {
     model: $("cfgModel").value.trim(),
     key: $("cfgKey").value.trim(),
     maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20)),
+    maxTimeout: Math.min(600, Math.max(60, parseInt($("cfgTimeout").value) || 300)),  // 60s-10min
     dados: $("cfgDados").value.trim(),
     mcps: $("cfgMcps").value.trim()
   };
@@ -916,16 +919,17 @@ async function runAgent(task) {
       const res = await tool(act.tool, execArgs);
       const obs = res?.ok ? (typeof res.out === "string" ? res.out : "ok") : "ERRO: " + res?.error;
       if (act.tool === "ler" && res?.ok) {
-        // auto-continua páginas longas para o resumo ficar COMPLETO (busca até +2 blocos)
+        // auto-continua páginas longas para o resumo ficar COMPLETO (busca até +3 blocos = 4 total = 24KB)
         const marcador = /\n\[\.\.\.a página tem[\s\S]*$/;
         let txt = String(res.out), off = 6000, cont = 0;
-        while (marcador.test(txt) && cont < 2) {
+        const MAX_AUTO_READ_BLOCKS = 3;  // 2 → 3 (total 4 blocos = 24KB vs 18KB)
+        while (marcador.test(txt) && cont < MAX_AUTO_READ_BLOCKS) {
           const mais = await tool("ler", { offset: off });
           if (!mais?.ok) break;
           txt = txt.replace(marcador, "") + String(mais.out);
           off += 6000; cont++;
         }
-        leitura = txt.replace(marcador, "").slice(0, 8000);
+        leitura = txt.replace(marcador, "").slice(0, 12000);  // 8000 → 12000 para aproveitar 4 blocos
         leuAlguma = true;
         feitas.push(`ler → conteúdo obtido${cont ? ` (${cont + 1} blocos, página longa)` : ""} (veja acima); se já basta, use "concluir"`);
       } else if (act.tool === "formulario" && res?.ok) {
@@ -951,10 +955,11 @@ async function runAgent(task) {
         status.textContent = `Interrompido por você · ${box.n} passos · ${secs()}s`;
         return;
       }
-      if (secs() > 240) { // teto de tempo: nunca rodar por minutos a fio
+      if (secs() > cfg.maxTimeout) { // teto de tempo configurável (padrão 5 min)
         statusTxt = null;
-        status.textContent = `Tempo limite (4 min) · ${box.n} passos`;
-        addMsg("err", "Tarefa interrompida por tempo (4 min). Divida em pedidos menores ou use um modelo mais rápido.");
+        const minutos = Math.round(cfg.maxTimeout / 60);
+        status.textContent = `Tempo limite (${minutos} min) · ${box.n} passos`;
+        addMsg("err", `Tarefa interrompida por tempo (${minutos} min). Divida em pedidos menores, use um modelo mais rápido, ou aumente o limite nas Configurações.`);
         return;
       }
       statusTxt = `${agent.nome} · passo ${passo}/${maxSteps}`;

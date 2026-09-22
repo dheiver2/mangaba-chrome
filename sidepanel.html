@@ -24,6 +24,9 @@
   <label>Máx. passos do agente (3–50)
     <input id="cfgSteps" type="number" min="3" max="50" value="20">
   </label>
+  <label>Timeout da tarefa em segundos (60–600, padrão 300 = 5 min)
+    <input id="cfgTimeout" type="number" min="60" max="600" value="300" step="60">
+  </label>
   <label>Meus dados (chave: valor — use como {{chave}}; nunca vão ao modelo)
     <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
   </label>
