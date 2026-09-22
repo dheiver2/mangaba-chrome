@@ -103,6 +103,22 @@ $("btnClearHistory").onclick = async () => {
   }
 };
 
+$("btnRefreshMcps").onclick = async () => {
+  $("btnRefreshMcps").disabled = true;
+  $("btnRefreshMcps").textContent = "🔄 Atualizando...";
+  try {
+    const cat = await mcpDiscover(cfg.mcps || DEFAULTS.mcps);
+    updateMcpStatus(cat);
+    $("btnRefreshMcps").textContent = "✓ Atualizado";
+    setTimeout(() => { $("btnRefreshMcps").textContent = "🔄 Atualizar"; }, 2000);
+  } catch (e) {
+    $("btnRefreshMcps").textContent = "❌ Erro";
+    console.error("MCP refresh erro:", e);
+  } finally {
+    $("btnRefreshMcps").disabled = false;
+  }
+};
+
 // Teclado shortcuts
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey) {
@@ -724,10 +740,33 @@ function pareceCaptcha(snap) {
   return CAPTCHA_SIG.test(alvo);
 }
 
+let lastMcpCatalog = [];  // Guardar último catálogo MCP para UI
+
 function setStop(on) {
   btnSend.textContent = on ? "■" : "↑";
   btnSend.title = on ? "Parar tarefa" : "Enviar";
   btnSend.classList.toggle("stop", on);
+}
+
+// MCP Management UI: mostrar status dos servidores
+function updateMcpStatus(cat) {
+  if (!cat || cat.length === 0) {
+    document.getElementById("mcpStatus").style.display = "none";
+    return;
+  }
+
+  lastMcpCatalog = cat;
+  const mcpStatus = document.getElementById("mcpStatus");
+  const mcpList = document.getElementById("mcpList");
+
+  mcpStatus.style.display = "block";
+  mcpList.innerHTML = cat.map((c) => {
+    const emoji = c.erro ? "❌" : "✅";
+    const status = c.erro ? `offline: ${c.erro.slice(0, 30)}...` : `${c.tools?.length || 0} ferramentas`;
+    return `<div style="padding: 6px; border-bottom: 1px solid #ddd; font-size: 11px;">
+      ${emoji} <strong>${c.nome}</strong> — ${status}
+    </div>`;
+  }).join("");
 }
 
 function stepsBox() {
@@ -853,6 +892,7 @@ async function runAgent(task) {
       box.add("Conectando aos servidores MCP...");
       try {
         const cat = await mcpDiscover(cfg.mcps);
+        updateMcpStatus(cat);  // Atualizar UI de status MCP
         mcpTexto = mcpCatalogText(cat);
         const ok = cat.filter((c) => !c.erro).length;
         const nTools = cat.reduce((n, c) => n + (c.tools?.length || 0), 0);
