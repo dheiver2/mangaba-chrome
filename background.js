@@ -496,6 +496,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           out = await exec(tab.id, detectarPaginacaoFn, []);
         } else if (tool === "aguarda_carregamento") {
           out = await exec(tab.id, aguardaCarregamentoFn, []);
+        } else if (tool === "snapshot_segmentado") {
+          out = await exec(tab.id, segmentaSnapshotFn, []);
         } else out = "ferramenta desconhecida: " + tool;
       }
       sendResponse({ ok: true, out });
@@ -539,12 +541,83 @@ const detectarPaginacaoFn = () => {
 // Aguardar carregamento: spinner, aria-busy, skeleton
 const aguardaCarregamentoFn = async () => {
   const spinners = () => document.querySelectorAll('[class*="load"], [class*="spin"], [aria-busy="true"], .skeleton');
-  
+
   let tentativas = 0;
   while (spinners().length > 0 && tentativas < 20) {
     await new Promise(r => setTimeout(r, 500));
     tentativas++;
   }
-  
+
   return tentativas < 20 ? "carregado" : "timeout (spinner pode estar travado)";
+};
+
+// Segmentação de snapshot: detectar seções (header, nav, main, sidebar, footer)
+const segmentaSnapshotFn = () => {
+  const identificaSecao = (el) => {
+    const role = el.getAttribute("role");
+    const id = el.id?.toLowerCase() || "";
+    const cls = el.className?.toLowerCase() || "";
+
+    if (role === "navigation" || id.includes("nav") || cls.includes("navbar") || cls.includes("nav-")) return "nav";
+    if (role === "main" || id.includes("main") || id.includes("content") || cls.includes("main-") || cls.includes("content")) return "main";
+    if (el.tagName === "ASIDE" || id.includes("sidebar") || cls.includes("sidebar") || cls.includes("aside")) return "sidebar";
+    if (el.tagName === "HEADER" || id.includes("header") || cls.includes("header-")) return "header";
+    if (el.tagName === "FOOTER" || id.includes("footer") || cls.includes("footer-")) return "footer";
+
+    return null;
+  };
+
+  const secoes = {
+    header: { elementos: [], texto: "" },
+    nav: { elementos: [], texto: "" },
+    main: { elementos: [], texto: "" },
+    sidebar: { elementos: [], texto: "" },
+    footer: { elementos: [], texto: "" },
+    outro: { elementos: [], texto: "" }
+  };
+
+  // Usar mesma estratégia do snapshot para encontrar elementos
+  const SEL = 'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="textbox"],[contenteditable="true"]';
+  const cands = [];
+  const vis = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+
+  document.querySelectorAll(SEL).forEach((el) => {
+    if (vis(el)) cands.push(el);
+  });
+
+  // Distribuir elementos por seção
+  cands.slice(0, 180).forEach((el, i) => {
+    // Encontrar o maior container que identifica a seção
+    let container = el;
+    let secao = "outro";
+    while (container && container !== document.body) {
+      const s = identificaSecao(container);
+      if (s) { secao = s; break; }
+      container = container.parentElement;
+    }
+
+    const elem = {
+      i,
+      tag: el.tagName.toLowerCase(),
+      texto: (el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || "").trim().slice(0, 50),
+      secao
+    };
+    secoes[secao].elementos.push(elem);
+  });
+
+  // Coletar texto por seção
+  const coleTxt = (sec) => (secoes[sec].texto = document.querySelector('[role="' + (sec === "nav" ? "navigation" : sec) + '"], ' +
+    (sec === "header" ? "header" : sec === "footer" ? "footer" : "aside") + ', [class*="' + sec + '"]')
+    ?.innerText?.slice(0, 300) || "");
+
+  Object.keys(secoes).forEach(coleTxt);
+
+  return {
+    tipo: "segmentado",
+    secoes,
+    resumo: Object.fromEntries(Object.entries(secoes).map(([k, v]) => [k, v.elementos.length + " elementos"]))
+  };
 };
