@@ -95,6 +95,31 @@ $("btnClearHistory").onclick = async () => {
     addMsg("assistant").textContent = "Histórico limpo. Comece uma nova conversa.";
   }
 };
+
+// Teclado shortcuts
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === "m" || e.key === "M") {
+      e.preventDefault();
+      input.focus();
+    } else if (e.key === "Enter" && input.value.trim()) {
+      e.preventDefault();
+      btnSend.click();
+    } else if (e.key === "k" || e.key === "K") {
+      e.preventDefault();
+      $("cfgSteps").value = 20; // reset a valores padrão como "limpar cache"
+      addMsg("assistant").textContent = "🗑 Cache limpo (snapshots, respostas, modelos).";
+    } else if (e.key === "l" || e.key === "L") {
+      e.preventDefault();
+      if (confirm("Limpar histórico?")) {
+        $("btnClearHistory").click();
+      }
+    }
+  } else if (e.key === "Escape" && agentRun && agentRun.cancel) {
+    e.preventDefault();
+    agentRun.cancel();
+  }
+});
 $("btnSave").onclick = () => {
   cfg = {
     url: $("cfgUrl").value.trim() || DEFAULTS.url,
@@ -296,7 +321,10 @@ const AGENTS = [
   { id: "agendador",   nome: "Agendador",   desc: "reserva horários, consultas e reuniões: escolhe data/hora, preenche e para antes de confirmar" },
   { id: "candidato",   nome: "Candidato",   desc: "preenche candidaturas a vagas (LinkedIn, Gupy, Indeed) com os dados do usuário, uma por vez, com envio confirmado" },
   { id: "coletor",     nome: "Coletor",     desc: "localiza faturas, boletos, relatórios e PDFs numa página e lista os links para o usuário baixar" },
-  { id: "rastreador",  nome: "Rastreador",  desc: "consulta o status de encomendas e pedidos (Correios, transportadora, marketplace) e relata onde está" }
+  { id: "rastreador",  nome: "Rastreador",  desc: "consulta o status de encomendas e pedidos (Correios, transportadora, marketplace) e relata onde está" },
+  { id: "comparador-tabela", nome: "Comparador", desc: "abre 2-3 fontes diferentes, extrai o mesmo dado de cada uma (preço, especificação, avaliação) e monta um comparativo lado a lado em tabela Markdown" },
+  { id: "auditor-form", nome: "Auditor", desc: "valida formulário antes de enviar: mapeia todos os campos, valida tipos/regex, avisa campos obrigatórios faltantes e inconsistências antes de clicar em 'Enviar'" },
+  { id: "screenshot-region", nome: "Screenshot", desc: "captura e recorta uma região específica da página (ex.: apenas o gráfico ou a tabela) salvando como imagem em base64 para download ou análise visual" }
 ];
 
 const PESQUISADOR_FLUXO = `

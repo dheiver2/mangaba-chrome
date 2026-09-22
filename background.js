@@ -492,6 +492,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             await sleep(400);
           }
           out = achou ? `"${alvo}" apareceu na página` : `"${alvo}" não apareceu em ${limite}s (a página pode não ter carregado ou o texto está diferente)`;
+        } else if (tool === "detectar_paginacao") {
+          out = await exec(tab.id, detectarPaginacaoFn, []);
+        } else if (tool === "aguarda_carregamento") {
+          out = await exec(tab.id, aguardaCarregamentoFn, []);
         } else out = "ferramenta desconhecida: " + tool;
       }
       sendResponse({ ok: true, out });
@@ -501,3 +505,46 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   })();
   return true; // resposta assíncrona
 });
+
+// ---- SEMANA 2: FERRAMENTAS ADICIONAIS ----
+
+// Detectar paginação: retorna {tipo, total, atual, proximo_elemento}
+const detectarPaginacaoFn = () => {
+  const sigs = {
+    proximo: [
+      ...document.querySelectorAll('a[rel="next"], a[aria-label*="next"], a[aria-label*="Próxima"], button:contains("Próxima"), a:contains(">"), a:contains("→")')
+    ],
+    carregar_mais: [...document.querySelectorAll('button:contains("Carregar"), a:contains("Carregar mais"), [class*="load-more"]')],
+    pagina_numerada: [...document.querySelectorAll('a[href*="page"], a[href*="p="]')],
+    indicador: document.querySelector('[aria-label*="of"], [aria-label*="de"], .pagination')
+  };
+  
+  const tem = (k) => sigs[k].length > 0;
+  const tipo = tem("proximo") ? "pagination" : tem("carregar_mais") ? "infinite" : "none";
+  
+  // Tentar extrair "X de Y"
+  const txt = document.body?.innerText || "";
+  const match = txt.match(/(\d+)\s+de\s+(\d+)/i) || txt.match(/(\d+)\s+\/\s+(\d+)/);
+  const atual = match ? parseInt(match[1]) : 1;
+  const total = match ? parseInt(match[2]) : atual + 1;
+  
+  return {
+    tipo,
+    total_paginas: total,
+    pagina_atual: atual,
+    proximo_elemento: sigs.proximo[0] || sigs.carregar_mais[0] || null
+  };
+};
+
+// Aguardar carregamento: spinner, aria-busy, skeleton
+const aguardaCarregamentoFn = async () => {
+  const spinners = () => document.querySelectorAll('[class*="load"], [class*="spin"], [aria-busy="true"], .skeleton');
+  
+  let tentativas = 0;
+  while (spinners().length > 0 && tentativas < 20) {
+    await new Promise(r => setTimeout(r, 500));
+    tentativas++;
+  }
+  
+  return tentativas < 20 ? "carregado" : "timeout (spinner pode estar travado)";
+};
