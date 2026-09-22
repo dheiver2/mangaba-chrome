@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "terser": "^5.24.0",
-    "cleancss": "^5.3.2",
+    "clean-css": "^5.3.2",
     "html-minifier": "^4.0.0",
     "eslint": "^8.50.0",
     "nodemon": "^3.0.1"
