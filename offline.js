@@ -14,12 +14,21 @@ const OFFLINE_CONFIG = {
 let offlineMode = false;
 let localModel = null;
 
+// fetch() nativo não tem opção "timeout" (é ignorada silenciosamente) — sem isto,
+// um llama.cpp travado ou ausente deixa a chamada pendurada em vez de falhar rápido.
+function offlineFetchWithTimeout(url, opts = {}, ms = 30000) {
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, ms);
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .catch((e) => { if (timedOut) throw new Error(`timeout após ${ms / 1000}s`); throw e; })
+    .finally(() => clearTimeout(timer));
+}
+
 // Detectar llama.cpp disponível
 async function detectOfflineModel() {
   try {
-    const resp = await fetch(`${OFFLINE_CONFIG.model_url}/v1/models`, {
-      timeout: 3000
-    });
+    const resp = await offlineFetchWithTimeout(`${OFFLINE_CONFIG.model_url}/v1/models`, {}, 3000);
     if (resp.ok) {
       const data = await resp.json();
       offlineMode = data.data?.length > 0;
@@ -59,7 +68,7 @@ Quando terminar, use "concluir" com o resultado.`
 
     try {
       // Chamar modelo local
-      const resp = await fetch(`${OFFLINE_CONFIG.model_url}/v1/chat/completions`, {
+      const resp = await offlineFetchWithTimeout(`${OFFLINE_CONFIG.model_url}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -69,7 +78,7 @@ Quando terminar, use "concluir" com o resultado.`
           temperature: OFFLINE_CONFIG.temperature,
           tools: tools_available  // Schema de ferramentas em JSON Schema
         })
-      });
+      }, OFFLINE_CONFIG.timeout);
 
       if (!resp.ok) {
         throw new Error(`Modelo offline indisponível: ${resp.status}`);
