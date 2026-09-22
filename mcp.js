@@ -6,6 +6,16 @@
 const mcpServers = new Map(); // nome -> {url, auth, sessionId, protocol, tools, erro}
 let mcpId = 0;
 
+// fetch() nativo não tem timeout embutido — sem isto, um MCP travado deixa a chamada pendurada pra sempre.
+function mcpFetchWithTimeout(url, opts = {}, ms = 8000) {
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, ms);
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .catch((e) => { if (timedOut) throw new Error(`timeout após ${ms / 1000}s`); throw e; })
+    .finally(() => clearTimeout(timer));
+}
+
 // config vinda do textarea: uma linha por servidor — "nome | https://url | Authorization (opcional)"
 // linhas em branco e começadas por # são ignoradas
 function parseMcpConfig(txt) {
@@ -27,7 +37,7 @@ async function mcpRpc(server, method, params, notify) {
   if (server.sessionId) headers["Mcp-Session-Id"] = server.sessionId;
   if (server.protocol) headers["MCP-Protocol-Version"] = server.protocol;
   const body = { jsonrpc: "2.0", method, ...(notify ? {} : { id: ++mcpId }), ...(params ? { params } : {}) };
-  const resp = await fetch(server.url, { method: "POST", headers, body: JSON.stringify(body) });
+  const resp = await mcpFetchWithTimeout(server.url, { method: "POST", headers, body: JSON.stringify(body) }, 8000);
   const sid = resp.headers.get("Mcp-Session-Id");
   if (sid) server.sessionId = sid;
   if (notify) return null; // notificações não têm corpo de resposta útil
@@ -63,41 +73,49 @@ async function mcpConnect(server) {
   return server.tools;
 }
 
-// LAZY LOAD: apenas descobre (não conecta) ao inicializar
-// Conexão acontece sob demanda em mcpCall, com cache de 24h
+// Descobre as ferramentas de cada servidor ao inicializar o agente.
+// Usa cache de 24h quando disponível; senão conecta de verdade (em paralelo, com timeout curto) —
+// sem isso, o catálogo fica sempre vazio na primeira execução e o agente nunca vê as ferramentas
+// pra decidir usá-las (mcpCatalogText só lista servidor com tools.length > 0), então a conexão
+// "sob demanda" nunca é acionada: um catch-22 que deixa o MCP inútil até alguém popular o cache.
 async function mcpDiscover(cfgTxt) {
   mcpServers.clear();
   const servers = parseMcpConfig(cfgTxt);
-  const catalogo = [];
 
-  // Tenta carregar cache de 24h do localStorage
   const cacheKey = "mcpCatalogCache";
   const cached = localStorage.getItem(cacheKey);
   const cacheData = cached ? JSON.parse(cached) : { servers: {}, ts: 0 };
   const cacheValid = Date.now() - cacheData.ts < 86400000; // 24h
 
-  for (const s of servers) {
-    let tools = [];
-    let erro = null;
-
-    // Se cache é válido e servidor estava conectado antes, usar cache
+  const catalogo = await Promise.all(servers.map(async (s) => {
     if (cacheValid && cacheData.servers[s.nome]) {
-      const cached = cacheData.servers[s.nome];
-      tools = cached.tools || [];
-      erro = cached.erro;
-    } else {
-      // Senão, servidor fica marcado como "pendente" (vai conectar on-demand)
-      s.pendente = true;
+      const c = cacheData.servers[s.nome];
+      const entry = { ...s, tools: c.tools || [], erro: c.erro };
+      mcpServers.set(s.nome, entry);
+      return { nome: s.nome, tools: entry.tools, erro: entry.erro };
     }
 
-    mcpServers.set(s.nome, { ...s, tools, erro });
-    catalogo.push({ nome: s.nome, tools, erro });
-  }
+    const entry = { ...s, tools: [], erro: null };
+    mcpServers.set(s.nome, entry);
+    try {
+      entry.tools = await mcpConnect(entry); // handshake real, timeout de 8s por chamada (mcpFetchWithTimeout)
+    } catch (e) {
+      entry.erro = String(e.message || e);
+    }
+    return { nome: s.nome, tools: entry.tools, erro: entry.erro };
+  }));
+
+  // Cacheia só sucessos: um erro transitório (rede instável, cold-start) não deve travar
+  // o servidor como "offline" por 24h — a próxima execução tenta de novo.
+  const cacheOut = { servers: {}, ts: Date.now() };
+  for (const c of catalogo) if (!c.erro) cacheOut.servers[c.nome] = { tools: c.tools, erro: null };
+  localStorage.setItem(cacheKey, JSON.stringify(cacheOut));
 
   return catalogo;
 }
 
-// Conecta um servidor específico sob demanda (chamado por mcpCall)
+// Fallback de segurança: reconecta um servidor cujo discover inicial não deixou tools nem erro
+// registrado (chamado por mcpCall antes de desistir de uma ferramenta).
 async function mcpConnectOnDemand(servidor) {
   const s = mcpServers.get(servidor);
   if (!s || s.tools.length > 0) return; // já conectado ou cache válido
@@ -105,7 +123,6 @@ async function mcpConnectOnDemand(servidor) {
   try {
     await mcpConnect(s);
     s.erro = null;
-    s.pendente = false;
   } catch (e) {
     s.erro = String(e.message || e);
     s.tools = [];
@@ -140,8 +157,8 @@ async function mcpCall(servidor, ferramenta, argumentos) {
   let s = mcpServers.get(servidor) || [...mcpServers.values()].find((x) => (x.tools || []).some((t) => t.name === ferramenta));
   if (!s) return { ok: false, error: `servidor MCP "${servidor}" não está conectado (confira as Configurações)` };
 
-  // Se servidor está pendente (lazy load), conectar agora
-  if (s.pendente) {
+  // Fallback: se por algum motivo o discover inicial não deixou tools nem erro, tenta agora
+  if (!s.tools?.length && !s.erro) {
     await mcpConnectOnDemand(s.nome);
   }
 
