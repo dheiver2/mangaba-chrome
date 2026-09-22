@@ -1013,6 +1013,32 @@ async function runAgent(task) {
       }
 
       box.add(`${passo}. ${describeAction(act, label)}`);
+
+      // ---- DETECÇÃO DE DEADLOCK: Verificar antes de executar ----
+      if (detectDeadlock(act)) {
+        deadlockWarnings++;
+        const snap = snapRes?.ok ? snapRes.out : null;
+        const diagnostico = diagnosticaDeadlock(act, snap);
+
+        if (deadlockWarnings >= MAX_DEADLOCK_WARNINGS) {
+          // Deadlock confirmado: PARAR
+          statusTxt = null;
+          status.textContent = `🔄 Deadlock detectado · ${box.n} passos`;
+          addMsg("err",
+            `⚠️ DEADLOCK DETECTADO\n\n` +
+            `Ação repetida 3x: ${act.tool} ${JSON.stringify(act.args || {}).slice(0, 80)}\n\n` +
+            `🔍 Possível causa:\n${diagnostico.possivel_causa}\n\n` +
+            `💡 Sugestão:\n${diagnostico.sugestao}\n\n` +
+            `Tente dividir em pedidos menores ou pergunte os dados manualmente.`
+          );
+          box.add(`Deadlock detectado — parado em passo ${passo}`);
+          return;
+        } else {
+          // Primeiro aviso
+          box.add(`⚠️ Loop detectado: repetindo "${act.tool}". Se continuar, vou parar. Verifique se tudo está OK.`);
+        }
+      }
+
       // substitui {{chave}} pelos dados reais SÓ na execução — o modelo nunca vê o valor
       let execArgs = act.args || {};
       if (act.tool === "digitar" && execArgs.texto) execArgs = { ...execArgs, texto: subDados(execArgs.texto) };
@@ -1049,6 +1075,58 @@ async function runAgent(task) {
     }
 
     if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" }); // parou durante o planejamento
+
+    // ---- DETECÇÃO DE DEADLOCK ----
+    const lastActions = [];  // Rastrear últimas 3 ações para detectar loop
+    const MAX_REPEAT = 3;    // Se repetir 3x → é deadlock
+    const MAX_DEADLOCK_WARNINGS = 2;
+    let deadlockWarnings = 0;
+
+    function detectDeadlock(acao) {
+      const actionSig = `${acao.tool}:${JSON.stringify(acao.args || {})}`.slice(0, 100);
+      lastActions.push(actionSig);
+      if (lastActions.length > MAX_REPEAT) lastActions.shift();
+
+      // Verificar se últimas 3 ações são idênticas
+      if (lastActions.length === MAX_REPEAT &&
+          lastActions[0] === lastActions[1] &&
+          lastActions[1] === lastActions[2]) {
+        return true;  // Deadlock detectado
+      }
+      return false;
+    }
+
+    function diagnosticaDeadlock(acao, snap) {
+      const diagnostico = {
+        acao_repetida: acao.tool,
+        possivel_causa: "desconhecida",
+        sugestao: "Tente de novo ou divida em pedidos menores"
+      };
+
+      // Heurística 1: elemento não encontrado?
+      if (acao.tool === "clicar" || acao.tool === "digitar") {
+        const indice = acao.args?.i;
+        if (!snap || indice >= (snap.elements || []).length) {
+          diagnostico.possivel_causa = "Elemento [" + indice + "] não encontrado — página mudou ou índices desatualizados";
+          diagnostico.sugestao = "Recarregue a página ou use 'snapshot' para atualizar índices";
+          return diagnostico;
+        }
+      }
+
+      // Heurística 2: modelo pequeno não entendeu?
+      if (cfg.model && cfg.model.includes("4b") || cfg.model.includes("7b")) {
+        diagnostico.possivel_causa = "Modelo pequeno (" + cfg.model + ") pode não estar entendendo a tarefa";
+        diagnostico.sugestao = "Tente um modelo maior (ex.: Qwen 30B) nas Configurações";
+        return diagnostico;
+      }
+
+      // Heurística 3: rate-limit invisível?
+      diagnostico.possivel_causa = "Gateway pode estar bloqueando (rate-limit) ou página está dinamicamente carregando";
+      diagnostico.sugestao = "Tente usar 'aguarda_carregamento' ou espere e re-tente";
+
+      return diagnostico;
+    }
+
     const maxSteps = cfg.maxSteps || 20;
     for (let passo = 1; passo <= maxSteps; passo++) {
       if (agentRun.cancel) {
