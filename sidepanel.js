@@ -75,7 +75,26 @@ function warmup() {
 }
 setTimeout(warmup, 400); // após carregar cfg do storage
 
+// Carregar histórico ao iniciar
+(async () => {
+  try {
+    const msgs = await getChatHistory();
+    for (const msg of msgs) {
+      const div = addMsg(msg.role);
+      if (msg.role === "assistant") setAssistant(div, msg.content);
+      else div.textContent = msg.content;
+    }
+  } catch { /* histórico vazio no primeiro uso */ }
+})();
+
 $("btnSettings").onclick = () => $("settings").classList.toggle("hidden");
+$("btnClearHistory").onclick = async () => {
+  if (confirm("Tem certeza que quer limpar TODO o histórico? Esta ação não pode ser desfeita.")) {
+    await clearHistory();
+    chat.innerHTML = '';
+    addMsg("assistant").textContent = "Histórico limpo. Comece uma nova conversa.";
+  }
+};
 $("btnSave").onclick = () => {
   cfg = {
     url: $("cfgUrl").value.trim() || DEFAULTS.url,
@@ -138,6 +157,8 @@ const TYPING = '<span class="dots"><span></span><span></span><span></span></span
 function addMsg(cls, text) {
   const div = document.createElement("div");
   div.className = "msg " + cls;
+  const finalText = text || "";
+
   if (cls === "assistant") {
     div.innerHTML = text === "…" || text === "" ? TYPING : md(text);
     const row = document.createElement("div");
@@ -158,6 +179,12 @@ function addMsg(cls, text) {
     chat.appendChild(div);
   }
   chat.scrollTop = chat.scrollHeight;
+
+  // Salvar ao histórico (assincronamente, sem bloquear UI)
+  if (text && text !== "…") {
+    addChatMessage(cls, finalText).catch(() => {});
+  }
+
   return div;
 }
 
@@ -196,9 +223,9 @@ function classificaErro(status, body) {
   return { temp: false, msg: `HTTP ${status}: ${(body || "").replace(/<[^>]+>/g, " ").slice(0, 160)}` };
 }
 
-// chamada não-streaming com retry (usada pelos agentes). Usa o abort do agente em TODAS as
-// chamadas (planejador, orquestrador, passos...) para o "parar" interromper na hora.
-async function llm(messages, maxTokens = 700, signal) {
+// chamada não-streaming com retry exponencial (usada pelos agentes)
+// statusCallback: fn(tentativa, maxTentativas, atraso) para atualizar UI
+async function llm(messages, maxTokens = 700, signal, statusCallback) {
   signal = signal || (agentRun && agentRun.abort && agentRun.abort.signal);
 
   // Verifica cache antes de chamar gateway
@@ -207,14 +234,21 @@ async function llm(messages, maxTokens = 700, signal) {
 
   const headers = gatewayHeaders();
   await ensureModel(headers);
+
+  // Retry config: exponential backoff até 15s
+  const MAX_ATTEMPTS = 5;
+  const BASE_DELAY = 1000;    // 1s
+  const MAX_DELAY = 15000;    // 15s
+  const BACKOFF_MULTIPLIER = 2;
+
   let ult = "";
-  for (let tent = 1; tent <= 4; tent++) {
+  for (let tent = 1; tent <= MAX_ATTEMPTS; tent++) {
     try {
       const resp = await fetch(cfg.url, {
         method: "POST",
         headers,
         signal,
-        // cache_prompt: o llama.cpp reaproveita o KV-cache do prefixo comum entre chamadas
+        timeout: 30000,  // 30s timeout individual por fetch
         body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0, cache_prompt: true })
       });
       if (!resp.ok) {
@@ -226,11 +260,23 @@ async function llm(messages, maxTokens = 700, signal) {
       cacheResponse(cfg.model, messages, result);
       return result;
     } catch (e) {
-      if (e.name === "AbortError") throw e; // parada do usuário: não tenta de novo
+      if (e.name === "AbortError") throw e; // parada do usuário
       if (e.fatal) throw e;
-      if (tent >= 4) throw new Error(`Gateway não respondeu após ${tent} tentativas (${ult || e.message}). Verifique se o Mangaba Gateway e o túnel estão no ar; se trocou de modelo, aguarde ele carregar do HD.`);
-      await sleep(1000 * tent); // espera crescente: cobre troca de modelo no USB 2.0
-      if (agentRun && agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" }); // parou durante a espera
+
+      if (tent >= MAX_ATTEMPTS) {
+        throw new Error(`Gateway não respondeu após ${tent} tentativas (${ult || e.message}). Verifique o gateway e o túnel; se trocou de modelo, aguarde o carregamento do HD (cold-start).`);
+      }
+
+      // Calcular delay com backoff exponencial + jitter
+      const delay = Math.min(MAX_DELAY, BASE_DELAY * Math.pow(BACKOFF_MULTIPLIER, tent - 1));
+      const jitter = Math.random() * (delay * 0.2); // ±10% jitter
+      const totalDelay = Math.round(delay + jitter);
+
+      // Callback para atualizar status visual
+      if (statusCallback) statusCallback(tent, MAX_ATTEMPTS, totalDelay);
+
+      await sleep(totalDelay);
+      if (agentRun && agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" });
     }
   }
 }
@@ -605,6 +651,13 @@ async function pickAgent(task) {
 
 // ---- runtime do agente ----
 let agentRun = null; // {cancel, waiting}
+let currentStatusElement = null;  // para atualizar status visual em retry
+
+function updateRetryStatus(tentativa, max, proximoAtraso) {
+  if (!currentStatusElement) return;
+  const segundosAtraso = Math.round(proximoAtraso / 1000);
+  currentStatusElement.textContent = `🔄 Processando · Retry ${tentativa}/${max} · aguardando ${segundosAtraso}s`;
+}
 
 const SENSITIVE_CLICK = /comprar|pagar|pagamento|checkout|finalizar|enviar|send|publicar|postar|post|tweet|responder|reply|compartilhar|share|excluir|apagar|deletar|remover|delete|assinar|transferir|confirmar|entrar|login|log ?in|sign ?in/i;
 const SENSITIVE_FIELD = /senha|password|cart[ãa]o|cvv|cpf|cnpj|\brg\b|c[óo]digo|token|2fa|otp|pin/i;
@@ -771,7 +824,7 @@ async function runAgent(task) {
       const p = parseAction(await llm([
         { role: "system", content: 'Você é o planejador da Mangaba AI. Gere um plano CURTO e REALISTA (2 a 4 passos) usando SÓ o que a tarefa literalmente pede. NUNCA invente etapas, cadastros, convites ou contas que o usuário não mencionou. Se a tarefa for ambígua/incompleta, o plano deve ser exatamente ["perguntar ao usuário o que ele quer"]. Se tiver vários itens (ex.: "10 perfis"), inclua "repetir para cada um dos N". Cada passo é uma STRING. Responda SOMENTE JSON: {"plano":["passo 1"]}' },
         { role: "user", content: task }
-      ], 250));
+      ], 250, null, updateRetryStatus));
       const achata = (x) => Array.isArray(x) ? x.flatMap(achata)
         : (x && typeof x === "object") ? Object.values(x).flatMap(achata) : [String(x)];
       if (p?.plano) plano = achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4);
