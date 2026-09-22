@@ -772,45 +772,88 @@ function updateMcpStatus(cat) {
 // Modal de Login/2FA
 let loginResolve = null;
 let loginTimeout = null;
+let modalVisible = false;
 
 function showLoginModal(timeout = 300000) {  // 5 min padrão
   return new Promise((resolve) => {
     loginResolve = resolve;
-    document.getElementById("pauseLogin").style.display = "flex";
+    modalVisible = true;
+    const modal = document.getElementById("pauseLogin");
+    if (!modal) {
+      console.error("❌ Modal pauseLogin não encontrada!");
+      resolve(false);
+      return;
+    }
 
-    // Timeout automático se usuário não clicar
+    modal.style.display = "flex";
+    console.log("✅ Modal aberta, aguardando clique...");
+
+    // Timeout automático
     loginTimeout = setTimeout(() => {
-      console.warn("⏱️ Timeout de login (5 min) — retomando agente");
-      hideLoginModal();
-      resolve(false);  // Indica que timeout ocorreu
+      console.warn("⏱️ Timeout 5 min — retomando");
+      if (modalVisible) hideLoginModal();
     }, timeout);
   });
 }
 
 function hideLoginModal() {
+  if (!modalVisible) return;
   clearTimeout(loginTimeout);
-  document.getElementById("pauseLogin").style.display = "none";
+  modalVisible = false;
+
+  const modal = document.getElementById("pauseLogin");
+  if (modal) modal.style.display = "none";
+  console.log("✅ Modal fechada");
+
   if (loginResolve) {
-    loginResolve(true);  // Indica que usuário clicou OK
+    const fn = loginResolve;
     loginResolve = null;
+    fn(true);  // Resolve promise
   }
 }
 
-// Event listener para botão de OK na modal
-document.addEventListener("DOMContentLoaded", () => {
-  const btnLoginOK = document.getElementById("btnLoginOK");
-  if (btnLoginOK) {
-    btnLoginOK.onclick = hideLoginModal;
+// AGRESSIVO: Múltiplas formas de capturar clique no botão OK
+function setupLoginButton() {
+  const btn = document.getElementById("btnLoginOK");
+  if (!btn) {
+    console.warn("⚠️ btnLoginOK não encontrado, tentando novamente em 500ms...");
+    setTimeout(setupLoginButton, 500);
+    return;
   }
-});
 
-// Se a página já carregou (ex: reload), adicionar listener direto
-if (document.readyState === "interactive" || document.readyState === "complete") {
-  const btnLoginOK = document.getElementById("btnLoginOK");
-  if (btnLoginOK) {
-    btnLoginOK.onclick = hideLoginModal;
-  }
+  // 1. Listener direto (onclick)
+  btn.onclick = hideLoginModal;
+
+  // 2. addEventListener (para garantir)
+  btn.addEventListener("click", hideLoginModal, false);
+
+  // 3. Listener para Enter
+  btn.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") hideLoginModal();
+  });
+
+  // 4. setAttribute inline (fallback extremo)
+  btn.setAttribute("onclick", "hideLoginModal()");
+
+  console.log("✅ Login button listeners ativados (4 formas)");
 }
+
+// Ativar logo que DOM estiver pronto
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupLoginButton);
+} else {
+  setupLoginButton();  // Já carregou
+}
+
+// EXTRA: Tentar novamente periodicamente (fallback se tudo falhar)
+setInterval(() => {
+  const btn = document.getElementById("btnLoginOK");
+  if (btn && !btn.onclick && !btn.__loginSetup) {
+    console.log("🔧 Re-adicionando listeners (fallback periódico)");
+    setupLoginButton();
+    btn.__loginSetup = true;
+  }
+}, 1000);
 
 function stepsBox() {
   const det = document.createElement("details");
