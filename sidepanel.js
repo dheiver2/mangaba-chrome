@@ -769,6 +769,40 @@ function updateMcpStatus(cat) {
   }).join("");
 }
 
+// Modal de Login/2FA
+let loginResolve = null;
+
+function showLoginModal() {
+  return new Promise((resolve) => {
+    loginResolve = resolve;
+    document.getElementById("pauseLogin").style.display = "flex";
+  });
+}
+
+function hideLoginModal() {
+  document.getElementById("pauseLogin").style.display = "none";
+  if (loginResolve) {
+    loginResolve(true);
+    loginResolve = null;
+  }
+}
+
+// Event listener para botão de OK na modal
+document.addEventListener("DOMContentLoaded", () => {
+  const btnLoginOK = document.getElementById("btnLoginOK");
+  if (btnLoginOK) {
+    btnLoginOK.onclick = hideLoginModal;
+  }
+});
+
+// Se a página já carregou (ex: reload), adicionar listener direto
+if (document.readyState === "interactive" || document.readyState === "complete") {
+  const btnLoginOK = document.getElementById("btnLoginOK");
+  if (btnLoginOK) {
+    btnLoginOK.onclick = hideLoginModal;
+  }
+}
+
 function stepsBox() {
   const det = document.createElement("details");
   det.className = "steps";
@@ -1041,7 +1075,7 @@ async function runAgent(task) {
         status.textContent = "🔐 Login necessário — complete no navegador";
         box.add("🔐 Campo de senha detectado — pausando para você fazer login");
 
-        const resposta = await askUser("Apareça um campo de senha. Complete o login (incluindo 2FA se necessário) no navegador e me avise aqui quando terminar.");
+        await showLoginModal();
         if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" });
 
         statusTxt = `${agent.nome} · retomando pós-login`;
@@ -1063,7 +1097,7 @@ async function runAgent(task) {
         status.textContent = "📞 Autenticação de 2 passos — aguardando (5 min)";
         box.add("📞 Verificação de 2 passos detectada — pausando com timeout de 5 min");
 
-        const resposta = await askUser("Apareça uma verificação de 2 passos (SMS, email, app). Complete no navegador. Você tem 5 minutos.");
+        await showLoginModal();
         if (agentRun.cancel) throw Object.assign(new Error("parado"), { name: "AbortError" });
 
         statusTxt = `${agent.nome} · retomando pós-2fa`;
