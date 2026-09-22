@@ -240,7 +240,7 @@ function addMsg(cls, text) {
   const finalText = text || "";
 
   if (cls === "assistant") {
-    div.innerHTML = text === "…" || text === "" ? TYPING : md(text);
+    div.innerHTML = finalText === "…" || finalText === "" ? TYPING : md(finalText);
     const row = document.createElement("div");
     row.className = "arow";
     const av = document.createElement("img");
