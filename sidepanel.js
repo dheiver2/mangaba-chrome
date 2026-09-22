@@ -6,6 +6,25 @@ const history = [];      // chat normal {role, content}
 const agentHistory = []; // modo agente {task, resposta}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// fetch() nativo não tem opção "timeout" (é ignorada silenciosamente) — sem isto,
+// um gateway que trava (cold-start, prompt longo) deixa a requisição pendente pra sempre.
+function fetchWithTimeout(url, opts = {}, ms = 45000) {
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(new DOMException("Timeout", "AbortError")); }, ms);
+  const externalSignal = opts.signal;
+  if (externalSignal) {
+    if (externalSignal.aborted) ctrl.abort(externalSignal.reason);
+    else externalSignal.addEventListener("abort", () => ctrl.abort(externalSignal.reason), { once: true });
+  }
+  return fetch(url, { ...opts, signal: ctrl.signal })
+    .catch((e) => {
+      if (timedOut) throw Object.assign(new Error(`Timeout após ${ms / 1000}s sem resposta do gateway`), { name: "TimeoutError" });
+      throw e;
+    })
+    .finally(() => clearTimeout(timer));
+}
+
 // ---- CACHE DE RESPOSTAS (30s TTL, max 10 entries) ----
 const RESPONSE_CACHE = {};
 const hashPayload = (model, messages) => {
@@ -305,13 +324,12 @@ async function llm(messages, maxTokens = 700, signal, statusCallback) {
   let ult = "";
   for (let tent = 1; tent <= MAX_ATTEMPTS; tent++) {
     try {
-      const resp = await fetch(cfg.url, {
+      const resp = await fetchWithTimeout(cfg.url, {
         method: "POST",
         headers,
         signal,
-        timeout: 30000,  // 30s timeout individual por fetch
         body: JSON.stringify({ model: cfg.model, messages, max_tokens: maxTokens, temperature: 0, cache_prompt: true })
-      });
+      }, 30000);  // 30s timeout individual por tentativa
       if (!resp.ok) {
         const c = classificaErro(resp.status, (await resp.text()).slice(0, 300));
         if (!c.temp) throw Object.assign(new Error(c.msg), { fatal: true });
@@ -631,7 +649,7 @@ function imgHash(s) {
 async function llmVision(dataUrl, pergunta) {
   const key = imgHash(dataUrl);
   if (visionCache.has(key)) return visionCache.get(key);
-  const resp = await fetch(cfg.url, {
+  const resp = await fetchWithTimeout(cfg.url, {
     method: "POST",
     headers: gatewayHeaders(),
     body: JSON.stringify({
@@ -832,10 +850,8 @@ function setupLoginButton() {
     if (e.key === "Enter") hideLoginModal();
   });
 
-  // 4. setAttribute inline (fallback extremo)
-  btn.setAttribute("onclick", "hideLoginModal()");
-
-  console.log("✅ Login button listeners ativados (4 formas)");
+  // Sem handler inline (onclick="..."): a CSP do Manifest V3 bloqueia e ainda anula btn.onclick
+  console.log("✅ Login button listeners ativados (3 formas)");
 }
 
 // Ativar logo que DOM estiver pronto
@@ -1550,11 +1566,20 @@ async function send() {
     const bubble = addMsg("assistant", "…");
     const headers = gatewayHeaders();
     await ensureModel(headers);
-    const resp = await fetch(cfg.url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true })
-    });
+    let resp;
+    try {
+      // Timeout só cobre até a resposta inicial (headers); a leitura do stream depois não tem limite,
+      // já que uma resposta longa pode legitimamente levar mais tempo chegando aos poucos.
+      resp = await fetchWithTimeout(cfg.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true })
+      }, 45000);
+    } catch (e) {
+      (bubble.closest(".arow") || bubble).remove();
+      if (e.name === "TimeoutError") throw new Error("Gateway não respondeu em 45s. Verifique se o servidor está online ou se o modelo está em cold-start.");
+      throw e;
+    }
     if (!resp.ok) { (bubble.closest(".arow") || bubble).remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
 
     let answer = "";

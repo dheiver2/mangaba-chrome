@@ -28,7 +28,7 @@ console.log("  ✓ #btnLoginOK:", btn ? "✅ Encontrado" : "❌ NÃO ENCONTRADO"
 console.log("\n📋 TESTE 3: Event listeners do botão?");
 if (btn) {
   console.log("  ✓ onclick:", btn.onclick ? "✅ Existe" : "❌ Vazio");
-  console.log("  ✓ getAttribute onclick:", btn.getAttribute("onclick") ? "✅ Existe" : "❌ Vazio");
+  console.log("  ✓ modal oculta no load:", getComputedStyle(modal).display === "none" ? "✅" : "❌ VISÍVEL (bug)");
   console.log("  ✓ listeners registrados:", btn.addEventListener ? "✅ Pode ter" : "❌ Não suporta");
 }
 
