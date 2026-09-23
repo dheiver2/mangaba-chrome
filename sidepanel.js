@@ -1718,48 +1718,62 @@ async function send() {
     messages.push(...history.slice(-12), { role: "user", content: question }); // só as últimas trocas: o histórico não pode crescer sem limite (estoura o contexto do GGUF local)
 
     const bubble = addMsg("assistant", "…");
-    const headers = gatewayHeaders();
-    await ensureModel(headers);
-    let resp;
-    try {
-      // Timeout só cobre até a resposta inicial (headers); a leitura do stream depois não tem limite,
-      // já que uma resposta longa pode legitimamente levar mais tempo chegando aos poucos.
-      resp = await fetchWithTimeout(cfg.url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true, max_tokens: cfg.maxTokens, temperature: cfg.temperature })
-      }, 45000);
-    } catch (e) {
-      (bubble.closest(".arow") || bubble).remove();
-      if (e.name === "TimeoutError") throw new Error("Gateway não respondeu em 45s. Verifique se o servidor está online ou se o modelo está em cold-start.");
-      throw e;
-    }
-    if (!resp.ok) { (bubble.closest(".arow") || bubble).remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
-
     let answer = "";
-    if (resp.headers.get("content-type")?.includes("event-stream")) {
-      const reader = resp.body.getReader();
-      const dec = new TextDecoder();
-      let buf = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop();
-        for (const line of lines) {
-          const data = line.replace(/^data:\s*/, "").trim();
-          if (!data || data === "[DONE]") continue;
-          try {
-            const delta = JSON.parse(data).choices?.[0]?.delta?.content;
-            if (delta) { answer += delta; setAssistant(bubble, answer); }
-          } catch { /* linha parcial */ }
-        }
+
+    // Modo offline (WebLLM): sem isto, o chat normal SEMPRE ia pro gateway mesmo com o
+    // modo offline ativo — o contexto da página era lido certinho (getPageContext já
+    // funciona), mas a pergunta em si nunca chegava ao modelo local, só ao gateway (que
+    // pode nem estar configurado se o usuário optou por rodar só localmente).
+    if (typeof offlineMode !== "undefined" && offlineMode) {
+      try {
+        answer = await runOfflineChat(messages, (partial) => setAssistant(bubble, partial));
+      } catch (e) {
+        (bubble.closest(".arow") || bubble).remove();
+        throw new Error("Modo offline: " + e.message);
       }
     } else {
-      const json = await resp.json();
-      answer = json.choices?.[0]?.message?.content || JSON.stringify(json).slice(0, 500);
-      setAssistant(bubble, answer);
+      const headers = gatewayHeaders();
+      await ensureModel(headers);
+      let resp;
+      try {
+        // Timeout só cobre até a resposta inicial (headers); a leitura do stream depois não tem limite,
+        // já que uma resposta longa pode legitimamente levar mais tempo chegando aos poucos.
+        resp = await fetchWithTimeout(cfg.url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true, max_tokens: cfg.maxTokens, temperature: cfg.temperature })
+        }, 45000);
+      } catch (e) {
+        (bubble.closest(".arow") || bubble).remove();
+        if (e.name === "TimeoutError") throw new Error("Gateway não respondeu em 45s. Verifique se o servidor está online ou se o modelo está em cold-start.");
+        throw e;
+      }
+      if (!resp.ok) { (bubble.closest(".arow") || bubble).remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
+
+      if (resp.headers.get("content-type")?.includes("event-stream")) {
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop();
+          for (const line of lines) {
+            const data = line.replace(/^data:\s*/, "").trim();
+            if (!data || data === "[DONE]") continue;
+            try {
+              const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+              if (delta) { answer += delta; setAssistant(bubble, answer); }
+            } catch { /* linha parcial */ }
+          }
+        }
+      } else {
+        const json = await resp.json();
+        answer = json.choices?.[0]?.message?.content || JSON.stringify(json).slice(0, 500);
+        setAssistant(bubble, answer);
+      }
     }
     history.push({ role: "user", content: question }, { role: "assistant", content: answer });
   } catch (e) {

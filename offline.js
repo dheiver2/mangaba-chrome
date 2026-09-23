@@ -77,6 +77,26 @@ async function toggleOfflineMode(enable, onProgress) {
   OFFLINE_CONFIG.enabled = true;
 }
 
+// Chat simples (pergunta + contexto da página, SEM tool-calling) via WebLLM — usado pelo
+// chat normal quando o modo offline está ativo. A restrição de "não dá pra combinar system
+// com tools" só existe quando `tools` é passado; aqui não é o caso, então mensagens normais
+// (incluindo role "system") funcionam sem o workaround usado em runOfflineAgent().
+async function runOfflineChat(messages, onDelta) {
+  const engine = await ensureWebLLMEngine();
+  const stream = await engine.chat.completions.create({
+    messages,
+    stream: true,
+    max_tokens: OFFLINE_CONFIG.max_tokens,
+    temperature: OFFLINE_CONFIG.temperature
+  });
+  let answer = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices?.[0]?.delta?.content;
+    if (delta) { answer += delta; onDelta?.(answer); }
+  }
+  return answer;
+}
+
 // Formata o resultado de uma ferramenta para texto legível pelo modelo. "snapshot" retorna um
 // objeto {url,title,elements,trecho} do background.js — sem isso, String(objeto) vira
 // "[object Object]" e o modelo nunca vê os elementos da página (índices [i] para clicar/digitar),
