@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mangaba AI",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Assistente brasileira no navegador: agente autônomo que controla o navegador, com deadlock detection, login/2FA automático e snapshot inteligente.",
   "icons": {
     "16": "icons/icon16.png",

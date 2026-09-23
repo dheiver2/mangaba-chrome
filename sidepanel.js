@@ -1142,8 +1142,13 @@ async function runAgent(task) {
     // independentes — rodar em paralelo evita somar seus tempos (cada chamada ao LLM pode
     // levar bastante em modelos maiores) antes do passo 1 nem aparecer.
     if (temMcps) box.add("Conectando aos servidores MCP...");
+    // escolher o agente especialista via LLM só vale a pena em tarefas complexas o bastante
+    // pra justificar mais uma chamada ao gateway: numa tarefa curta ela é só latência extra
+    // adicionada a CADA mensagem (desde que o chat normal foi removido, toda mensagem passa
+    // por aqui) — nesse caso cai direto no "mangaba" (faz tudo), que já é o fallback do
+    // próprio roteador pra tarefa genérica/ambígua.
     statusTxt = precisaPlano && sel === "auto" ? "Planejando e escolhendo o agente"
-      : precisaPlano ? "Planejando" : sel === "auto" ? "Escolhendo o agente" : statusTxt;
+      : precisaPlano ? "Planejando" : statusTxt;
     const [, plano, agentPick, memorias] = await Promise.all([
       (async () => {
         if (!temMcps) return;
@@ -1169,7 +1174,9 @@ async function runAgent(task) {
           return p?.plano ? achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4) : [];
         } catch { return []; /* plano é opcional */ }
       })(),
-      sel !== "auto" ? { agent: AGENTS.find((a) => a.id === sel) || UNIFIED, viaJev: false } : pickAgent(task),
+      sel !== "auto" ? { agent: AGENTS.find((a) => a.id === sel) || UNIFIED, viaJev: false }
+        : precisaPlano ? pickAgent(task)
+        : { agent: UNIFIED, viaJev: false }, // tarefa curta: pula a chamada de roteamento, vai direto pro "faz tudo"
       getMemories().catch(() => [])
     ]);
     const { agent, viaJev } = agentPick;
