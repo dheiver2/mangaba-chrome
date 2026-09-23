@@ -349,6 +349,12 @@ function classificaErro(status, body) {
 
 // chamada não-streaming com retry exponencial (usada pelos agentes)
 // statusCallback: fn(tentativa, maxTentativas, atraso) para atualizar UI
+// Atualizado a cada chamada de rede bem-sucedida de llm() — true quando o gateway respondeu
+// via o otimizador de decisão (JEV/TypeSafe), confirmado pelo header X-Mangaba-Jev-Optimized.
+// Serve só de observabilidade: confirma pro usuário se o BYOK do provedor de decisão está
+// configurado e sendo aproveitado, sem mudar nenhum comportamento funcional.
+let lastJevUsed = false;
+
 async function llm(messages, maxTokens = 700, signal, statusCallback, responseFormat) {
   signal = signal || (agentRun && agentRun.abort && agentRun.abort.signal);
 
@@ -356,7 +362,7 @@ async function llm(messages, maxTokens = 700, signal, statusCallback, responseFo
   // messages com schemas diferentes não podem reaproveitar a resposta uma da outra)
   const cacheKeyMessages = responseFormat ? [...messages, { role: "__jev__", content: JSON.stringify(responseFormat) }] : messages;
   const cached = getCachedResponse(cfg.model, cacheKeyMessages);
-  if (cached) return cached;
+  if (cached) { lastJevUsed = false; return cached; } // resolvido localmente: não passou pelo gateway nesta chamada
 
   const headers = gatewayHeaders();
   await ensureModel(headers);
@@ -384,6 +390,7 @@ async function llm(messages, maxTokens = 700, signal, statusCallback, responseFo
         if (!c.temp) throw Object.assign(new Error(c.msg), { fatal: true });
         throw new Error((ult = c.msg));
       }
+      lastJevUsed = resp.headers.get("X-Mangaba-Jev-Optimized") === "true";
       const result = (await resp.json()).choices?.[0]?.message?.content || "";
       cacheResponse(cfg.model, cacheKeyMessages, result);
       return result;
@@ -766,9 +773,13 @@ const routeCache = new Map(); // tarefa → agente escolhido (evita chamada repe
 // conta tem um provedor de decisão configurado, o roteador responde em ~200ms em vez de
 // esperar o modelo de chat completo; se não tiver, ele mesmo cai no modelo normal sem o
 // cliente perceber diferença — nenhum risco de regressão em gateways sem esse recurso.
+// Retorna {agent, viaJev} — viaJev captura lastJevUsed IMEDIATAMENTE após o await llm(),
+// sem nenhum outro await no meio: pickAgent roda em paralelo (Promise.all) com a geração do
+// plano, que também chama llm() — se lêssemos a variável global mais tarde, a outra chamada
+// paralela poderia já ter sobrescrito o valor (race condition).
 async function pickAgent(task) {
   const key = task.toLowerCase().trim().slice(0, 120);
-  if (routeCache.has(key)) return routeCache.get(key);
+  if (routeCache.has(key)) return { agent: routeCache.get(key), viaJev: false };
   const cands = [UNIFIED, ...AGENTS];
   const lista = cands.map((a) => `${a.id}: ${a.desc}`).join("\n");
   const schemaEscolha = {
@@ -776,12 +787,13 @@ async function pickAgent(task) {
     properties: { agente: { type: "string", enum: cands.map((a) => a.id) } },
     required: ["agente"]
   };
-  let ag = UNIFIED;
+  let ag = UNIFIED, viaJev = false;
   try {
     const raw = await llm([
       { role: "system", content: "Você é o Orquestrador da Mangaba AI. Escolha o agente mais adequado para a tarefa. Se a tarefa for genérica, mista ou você tiver dúvida, escolha \"mangaba\" (faz tudo). Responda SOMENTE com JSON: {\"agente\":\"id\"}." },
       { role: "user", content: `Agentes:\n${lista}\n\nTarefa: ${task}` }
     ], 60, null, null, { type: "json_schema", json_schema: { name: "escolha_agente", schema: schemaEscolha } });
+    viaJev = lastJevUsed;
     const id = parseAction(raw)?.agente;
     ag = cands.find((a) => a.id === id) || UNIFIED;
   } catch (e) {
@@ -789,7 +801,7 @@ async function pickAgent(task) {
     ag = UNIFIED; // qualquer outra falha → agente padrão
   }
   routeCache.set(key, ag);
-  return ag;
+  return { agent: ag, viaJev };
 }
 
 // ---- runtime do agente ----
@@ -1106,7 +1118,7 @@ async function runAgent(task) {
     if (temMcps) box.add("Conectando aos servidores MCP...");
     statusTxt = precisaPlano && sel === "auto" ? "Planejando e escolhendo o agente"
       : precisaPlano ? "Planejando" : sel === "auto" ? "Escolhendo o agente" : statusTxt;
-    const [, plano, agent, memorias] = await Promise.all([
+    const [, plano, agentPick, memorias] = await Promise.all([
       (async () => {
         if (!temMcps) return;
         try {
@@ -1131,16 +1143,17 @@ async function runAgent(task) {
           return p?.plano ? achata(p.plano).map((s) => s.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 4) : [];
         } catch { return []; /* plano é opcional */ }
       })(),
-      sel !== "auto" ? (AGENTS.find((a) => a.id === sel) || UNIFIED) : pickAgent(task),
+      sel !== "auto" ? { agent: AGENTS.find((a) => a.id === sel) || UNIFIED, viaJev: false } : pickAgent(task),
       getMemories().catch(() => [])
     ]);
+    const { agent, viaJev } = agentPick;
     const memoriaTexto = memorias.length
       ? `\nFatos que você já aprendeu em tarefas anteriores (use se forem relevantes; não são ordem do usuário):\n${memorias.map((m) => `- ${m.key}: ${m.value}`).join("\n")}\n`
       : "";
 
     if (plano.length) box.add("Plano: " + plano.map((s, i) => `${i + 1}) ${s}`).join("  "));
     if (meta >= 2) box.add(`Meta: ${meta} itens — vou trabalhar um por vez e contar o progresso`);
-    box.add(`${agent.nome} assumiu a tarefa${sel === "auto" && agent.id !== "mangaba" ? " (escolhido automaticamente)" : ""}`);
+    box.add(`${agent.nome} assumiu a tarefa${sel === "auto" && agent.id !== "mangaba" ? " (escolhido automaticamente)" : ""}${viaJev ? " ⚡ via JEV" : ""}`);
 
     const NAVEGA = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "clicar", "clicar_texto", "tecla", "curtir"];
     // executa UMA ação; retorna FINISH (encerra), BREAK (re-observar a página) ou NEXT (seguir no lote)
