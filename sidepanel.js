@@ -59,7 +59,6 @@ const DEFAULTS = {
   maxTokens: 700,   // resposta máxima
   systemPrompt: "", // customizável
   offlineMode: false,
-  offlineProvider: "llamacpp", // "llamacpp" | "webllm"
   dados: "",
   mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
 };
@@ -73,7 +72,6 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgSteps").value = cfg.maxSteps;
   $("cfgTimeout").value = cfg.maxTimeout || 300;
   $("cfgOffline").checked = cfg.offlineMode || false;
-  $("cfgOfflineProvider").value = cfg.offlineProvider || "llamacpp";
   $("cfgTemperature").value = cfg.temperature ?? 0;
   $("cfgMaxTokens").value = cfg.maxTokens ?? 700;
   $("cfgSystemPrompt").value = cfg.systemPrompt || "";
@@ -175,22 +173,21 @@ $("btnSave").onclick = () => {
     maxTokens: Math.min(4000, Math.max(100, parseInt($("cfgMaxTokens").value) || 700)),
     systemPrompt: $("cfgSystemPrompt").value.trim(),
     offlineMode: $("cfgOffline").checked,
-    offlineProvider: $("cfgOfflineProvider").value,
     dados: $("cfgDados").value.trim(),
     mcps: $("cfgMcps").value.trim()
   };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
 
-  // Ativar/desativar modo offline
+  // Ativar/desativar modo offline (WebLLM) — onProgress mostra o download/preparo do modelo,
+  // que só acontece de fato na primeira vez (fica em cache do navegador depois).
   if (cfg.offlineMode) {
-    OFFLINE_CONFIG.provider = cfg.offlineProvider;
     const progressEl = $("offlineProgress");
-    const onProgress = cfg.offlineProvider === "webllm" ? (report) => {
+    const onProgress = (report) => {
       progressEl.style.display = "block";
       const pct = Math.round((report.progress || 0) * 100);
       progressEl.textContent = `⏳ ${report.text || "Preparando modelo local..."} (${pct}%)`;
-    } : undefined;
+    };
     toggleOfflineMode(true, onProgress).then(() => {
       progressEl.style.display = "none";
     }).catch(e => {
