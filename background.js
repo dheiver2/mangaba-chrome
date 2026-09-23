@@ -67,14 +67,28 @@ const snapshotFn = () => {
 
   const walk = (root) => {
     if (!root || cands.length >= MAX_CANDIDATES || varridos > MAX_TRAVERSALS) return;
+    const jaCandidato = new Set();
     for (const el of root.querySelectorAll(SEL)) {
       if (cands.length >= MAX_CANDIDATES) break;
-      if (vis(el)) cands.push(el);
+      if (vis(el)) { cands.push(el); jaCandidato.add(el); }
     }
     for (const el of root.querySelectorAll("*")) {
       if (cands.length >= MAX_CANDIDATES || ++varridos > MAX_TRAVERSALS) break;
       if (el.shadowRoot) walk(el.shadowRoot);
       else if (el.tagName === "IFRAME") { try { walk(el.contentDocument); } catch { /* cross-origin */ } }
+      // Heurística extra: divs/spans "clicáveis" sem tag semântica nem role — comum em
+      // SPAs React/Vue que usam onClick em vez de <button> (ex.: cards de dashboard).
+      // cursor:pointer é o sinal mais forte disponível sem inspecionar listeners JS
+      // (impossível via DOM puro). Ignora elementos grandes demais (prováveis containers
+      // com clique delegado, não itens específicos) para não virarem "botões" do tamanho da tela.
+      else if (!jaCandidato.has(el) && vis(el)) {
+        const r = el.getBoundingClientRect();
+        const grandeDemais = r.width > innerWidth * 0.9 && r.height > innerHeight * 0.5;
+        if (!grandeDemais && getComputedStyle(el).cursor === "pointer") {
+          cands.push(el);
+          jaCandidato.add(el);
+        }
+      }
     }
   };
   walk(document);
