@@ -1691,6 +1691,24 @@ async function runAgent(task) {
   }
 }
 
+// Saudação/agradecimento/despedida PURA (a mensagem inteira, sem mais nada junto) não pede
+// nenhuma ação no navegador — mas antes de chegar aqui, o modo agente pagava o custo de MCP
+// discovery + snapshot da página + ~2000 tokens de TOOLS_DOC/fluxo só pra concluir isso na
+// primeira resposta. Em gateway CPU-only isso já rendeu reclamação real de "oi" levando
+// 20s+. Resolvido sem nenhuma chamada ao LLM: regex cobre só a mensagem inteira (não um
+// prefixo), então "oi, pesquise sobre X" continua indo pro agente normalmente.
+const SOCIAL_SAUDACAO = /^(oi+|ol[áa]+|e a[íi]|opa|eae|hey|hello|bom dia|boa tarde|boa noite)[\s!.,?]*$/i;
+const SOCIAL_AGRADECE = /^(obrigad[oa]s?|muito obrigad[oa]|valeu|vlw)[\s!.,?]*$/i;
+const SOCIAL_TCHAU = /^(tchau|flw|falou|at[ée] (mais|logo|amanh[ãa]))[\s!.,?]*$/i;
+const SOCIAL_COMOVAI = /^((oi+|ol[áa]+|e a[íi]|opa|eae)[\s,!]*)?(tudo bem\??|tudo bom\??|como (voc[êe] )?(est[áa]|vai)\??|beleza\??|blz\??)[\s!.,?]*$/i;
+function respostaSocial(q) {
+  if (SOCIAL_SAUDACAO.test(q)) return "Oi! Como posso ajudar?";
+  if (SOCIAL_AGRADECE.test(q)) return "De nada! Qualquer coisa é só chamar.";
+  if (SOCIAL_TCHAU.test(q)) return "Até mais! 👋";
+  if (SOCIAL_COMOVAI.test(q)) return "Tudo certo por aqui! Em que posso ajudar?";
+  return null;
+}
+
 async function send() {
   const question = input.value.trim();
   if (!question) return;
@@ -1709,6 +1727,10 @@ async function send() {
 
   input.value = ""; input.style.height = "";
   addMsg("user", question);
+
+  const social = respostaSocial(question);
+  if (social) { addMsg("assistant", social); agentHistory.push({ task: question, resposta: social }); return; }
+
   await runAgent(question);
 }
 
