@@ -37,8 +37,13 @@ const invalidateSnapshot = async (tabId, url) => {
   delete SNAPSHOT_CACHE[`${tabId}:${url}:${sessionId}`];
 };
 
-async function getTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+// windowId vem do side panel que enviou a mensagem (ele sabe em qual janela está,
+// via chrome.windows.getCurrent()). Sem isso, "currentWindow" aqui no service worker
+// resolve pra ÚLTIMA janela com foco do SO, não necessariamente a do side panel que
+// pediu — com várias janelas do Chrome abertas, isso lia a aba errada silenciosamente.
+async function getTab(windowId) {
+  const query = windowId ? { active: true, windowId } : { active: true, currentWindow: true };
+  const [tab] = await chrome.tabs.query(query);
   if (!tab?.id || /^(chrome|edge|about|chrome-extension):/.test(tab.url || ""))
     throw new Error("Página não acessível");
   return tab;
@@ -388,7 +393,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     try {
       if (msg.type === "GET_PAGE_CONTEXT") {
-        const tab = await getTab();
+        const tab = await getTab(msg.windowId);
         const page = await exec(tab.id, () => ({
           title: document.title,
           url: location.href,
@@ -404,18 +409,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         await sleep(s * 1000);
         out = `esperei ${s}s`;
       } else if (tool === "nova_aba") {
-        const nt = await chrome.tabs.create({ url: args.url, active: true });
+        const nt = await chrome.tabs.create({ url: args.url, active: true, ...(msg.windowId ? { windowId: msg.windowId } : {}) });
         await sleep(500); await waitLoad(nt.id);
         out = "abri nova aba em " + args.url;
       } else if (tool === "listar_abas") {
-        const tabs = await chrome.tabs.query({ currentWindow: true });
+        const tabs = await chrome.tabs.query(msg.windowId ? { windowId: msg.windowId } : { currentWindow: true });
         out = tabs.map((t) => `[${t.id}]${t.active ? "*" : ""} ${(t.title || "").slice(0, 50)} — ${(t.url || "").slice(0, 60)}`).join("\n");
       } else if (tool === "trocar_aba") {
         await chrome.tabs.update(+args.id, { active: true });
         await sleep(400);
         out = "fui para a aba [" + args.id + "]";
       } else if (tool === "olhar") {
-        const tab = await getTab();
+        const tab = await getTab(msg.windowId);
         // Tenta WebP primeiro (mais compacto que JPEG), fallback para JPEG
         let dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "webp", quality: 75 }).catch(() => null);
         if (!dataUrl) dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 });
@@ -451,7 +456,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           ).join("\n\n");
         }
       } else {
-        const tab = await getTab();
+        const tab = await getTab(msg.windowId);
         if (tool === "snapshot") {
           const cached = await getCachedSnapshot(tab.id, tab.url);
           if (cached) {

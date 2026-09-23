@@ -187,7 +187,7 @@ async function runOfflineAgent(task, tools_available, onProgress) {
       let toolResult;
       try {
         toolResult = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolName, args: toolArgs }, resolve);
+          chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolName, args: toolArgs, windowId: typeof myWindowId !== "undefined" ? myWindowId : undefined }, resolve);
         });
       } catch (e) {
         toolResult = { ok: false, error: e.message };

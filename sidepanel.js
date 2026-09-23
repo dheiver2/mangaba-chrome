@@ -6,6 +6,14 @@ const history = [];      // chat normal {role, content}
 const agentHistory = []; // modo agente {task, resposta}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// windowId da janela ONDE ESTA side panel está aberta — enviado em toda mensagem pro
+// service worker. Sem isso, chrome.tabs.query({currentWindow:true}) rodando no service
+// worker resolve pra última janela com foco do SO, não necessariamente a desta side panel:
+// com várias janelas do Chrome abertas, a extensão lia a aba ativa da janela ERRADA
+// silenciosamente (sem erro — só "não reconhecia" a página que o usuário via).
+let myWindowId = null;
+chrome.windows.getCurrent().then((w) => { myWindowId = w.id; }).catch(() => {});
+
 // fetch() nativo não tem opção "timeout" (é ignorada silenciosamente) — sem isto,
 // um gateway que trava (cold-start, prompt longo) deixa a requisição pendente pra sempre.
 function fetchWithTimeout(url, opts = {}, ms = 45000) {
@@ -643,7 +651,7 @@ function repairJson(s) {
 async function tool(t, args) {
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args });
+      const r = await chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args, windowId: myWindowId });
       if (r !== undefined) return r;
     } catch { /* canal fechou: worker dormiu */ }
     await sleep(300);
@@ -1585,7 +1593,7 @@ function precisaAgente(task) {
 let pageCtxCache = null; // {t, ctx} — evita reextrair a página em perguntas seguidas
 async function getPageContext() {
   if (pageCtxCache && Date.now() - pageCtxCache.t < 5000) return pageCtxCache.ctx;
-  const res = await chrome.runtime.sendMessage({ type: "GET_PAGE_CONTEXT" });
+  const res = await chrome.runtime.sendMessage({ type: "GET_PAGE_CONTEXT", windowId: myWindowId });
   if (!res?.ok) return null;
   const { title, url, text } = res.page;
   const ctx = `Contexto da página aberta:\nTítulo: ${title}\nURL: ${url}\nConteúdo:\n${text}`;
