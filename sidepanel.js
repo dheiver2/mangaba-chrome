@@ -72,6 +72,15 @@ const DEFAULTS = {
 };
 let cfg = { ...DEFAULTS };
 
+// Modo offline (WebLLM) não usa gateway, MCP nem os agentes especialistas — mostrar esses
+// campos só confunde quando ativado. Roda no load e a cada toggle do checkbox.
+function updateOfflineUI() {
+  const off = $("cfgOffline").checked;
+  for (const id of ["grpGateway", "grpMcp", "grpAgente", "grpSystemPrompt", "lblTimeout"]) {
+    $(id).style.display = off ? "none" : "";
+  }
+}
+
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   cfg = saved;
   $("cfgUrl").value = cfg.url;
@@ -85,7 +94,14 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgSystemPrompt").value = cfg.systemPrompt || "";
   $("cfgDados").value = cfg.dados || "";
   $("cfgMcps").value = cfg.mcps ?? DEFAULTS.mcps;
+  updateOfflineUI();
+  if (typeof OFFLINE_CONFIG !== "undefined") {
+    OFFLINE_CONFIG.temperature = cfg.temperature;
+    OFFLINE_CONFIG.max_tokens = cfg.maxTokens;
+    OFFLINE_CONFIG.max_steps = cfg.maxSteps;
+  }
 });
+$("cfgOffline").addEventListener("change", updateOfflineUI);
 
 // mapa dos dados pessoais (chave->valor) e substituição de {{chave}} feita SÓ na execução (fora do modelo)
 function dadosMap() {
@@ -186,6 +202,16 @@ $("btnSave").onclick = () => {
   };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
+  updateOfflineUI();
+
+  // Temperatura/max tokens/máx. passos são os únicos campos que continuam visíveis e
+  // editáveis no modo offline (o resto fica escondido por updateOfflineUI) — sem isto,
+  // eles ficavam visíveis mas não tinham efeito nenhum no WebLLM (valores fixos internos).
+  if (typeof OFFLINE_CONFIG !== "undefined") {
+    OFFLINE_CONFIG.temperature = cfg.temperature;
+    OFFLINE_CONFIG.max_tokens = cfg.maxTokens;
+    OFFLINE_CONFIG.max_steps = cfg.maxSteps;
+  }
 
   // Ativar/desativar modo offline (WebLLM) — onProgress mostra o download/preparo do modelo,
   // que só acontece de fato na primeira vez (fica em cache do navegador depois).

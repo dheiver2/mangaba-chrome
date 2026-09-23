@@ -17,7 +17,8 @@ const OFFLINE_CONFIG = {
   enabled: false,
   webllm_model: "Hermes-2-Pro-Mistral-7B-q4f16_1-MLC",
   max_tokens: 600,
-  temperature: 0.2
+  temperature: 0.2,
+  max_steps: 20
 };
 
 let offlineMode = false;
@@ -157,7 +158,7 @@ async function runOfflineAgent(task, tools_available, onProgress) {
     }
   ];
 
-  const MAX_STEPS = 20;
+  const MAX_STEPS = OFFLINE_CONFIG.max_steps || 20;
   for (let step = 1; step <= MAX_STEPS; step++) {
     let resp;
     try {

@@ -20,69 +20,77 @@
 </div>
 
 <div id="settings" class="hidden">
-  <label>URL do Gateway
-    <input id="cfgUrl" placeholder="http://localhost:8080/v1/chat/completions">
-  </label>
-  <label>Modelo
-    <input id="cfgModel" placeholder="ex.: qwen3-4b">
-  </label>
-  <label>API Key (opcional)
-    <input id="cfgKey" type="password">
-  </label>
-  <label>Máx. passos do agente (3–50)
-    <input id="cfgSteps" type="number" min="3" max="50" value="20">
-  </label>
-  <label>Timeout da tarefa em segundos (60–600, padrão 300 = 5 min)
-    <input id="cfgTimeout" type="number" min="60" max="600" value="300" step="60">
-  </label>
-  <hr>
-  <h3>⚙️ Avançado</h3>
   <label>Modo Offline — agente local via WebLLM, sem gateway nem servidor externo (requer WebGPU; baixa ~4-5GB na 1ª vez, depois fica em cache)
     <input id="cfgOffline" type="checkbox"> Ativar
   </label>
   <div id="offlineProgress" style="display: none; margin: 4px 0; font-size: 12px; color: #666;"></div>
+  <div id="grpGateway">
+    <label>URL do Gateway
+      <input id="cfgUrl" placeholder="http://localhost:8080/v1/chat/completions">
+    </label>
+    <label>Modelo
+      <input id="cfgModel" placeholder="ex.: qwen3-4b">
+    </label>
+    <label>API Key (opcional)
+      <input id="cfgKey" type="password">
+    </label>
+  </div>
+  <label>Máx. passos do agente (3–50)
+    <input id="cfgSteps" type="number" min="3" max="50" value="20">
+  </label>
+  <label id="lblTimeout">Timeout da tarefa em segundos (60–600, padrão 300 = 5 min)
+    <input id="cfgTimeout" type="number" min="60" max="600" value="300" step="60">
+  </label>
+  <hr>
+  <h3>⚙️ Avançado</h3>
   <label>Temperatura do modelo (criatividade: 0.0–1.0, padrão 0.0)
     <input id="cfgTemperature" type="number" min="0" max="1" step="0.1" value="0">
   </label>
   <label>Max tokens por resposta (100–4000, padrão 700)
     <input id="cfgMaxTokens" type="number" min="100" max="4000" value="700" step="100">
   </label>
-  <label>System prompt customizado (deixe vazio para padrão)
-    <textarea id="cfgSystemPrompt" rows="3" placeholder="(opcional)"></textarea>
-  </label>
+  <div id="grpSystemPrompt">
+    <label>System prompt customizado (deixe vazio para padrão)
+      <textarea id="cfgSystemPrompt" rows="3" placeholder="(opcional)"></textarea>
+    </label>
+  </div>
   <hr>
   <label>Meus dados (chave: valor — use como {{chave}}; nunca vão ao modelo)
     <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
   </label>
-  <label>Servidores MCP (nome | https://url | Authorization opcional — um por linha; # comenta)
-    <textarea id="cfgMcps" rows="4" placeholder="deepwiki | https://mcp.deepwiki.com/mcp&#10;context7 | https://mcp.context7.com/mcp&#10;# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"></textarea>
-  </label>
-  <div id="mcpStatus" style="margin-top: 12px; padding: 10px; background: #f5f5f5; border-radius: 4px; font-size: 12px; display: none;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-      <strong>Status dos MCPs:</strong>
-      <button id="btnRefreshMcps" style="background: #4CAF50; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 11px;">🔄 Atualizar</button>
+  <div id="grpMcp">
+    <label>Servidores MCP (nome | https://url | Authorization opcional — um por linha; # comenta)
+      <textarea id="cfgMcps" rows="4" placeholder="deepwiki | https://mcp.deepwiki.com/mcp&#10;context7 | https://mcp.context7.com/mcp&#10;# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"></textarea>
+    </label>
+    <div id="mcpStatus" style="margin-top: 12px; padding: 10px; background: #f5f5f5; border-radius: 4px; font-size: 12px; display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <strong>Status dos MCPs:</strong>
+        <button id="btnRefreshMcps" style="background: #4CAF50; color: white; border: none; padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 11px;">🔄 Atualizar</button>
+      </div>
+      <div id="mcpList" style="max-height: 200px; overflow-y: auto;"></div>
     </div>
-    <div id="mcpList" style="max-height: 200px; overflow-y: auto;"></div>
   </div>
-  <label>Modo do agente (deixe em Automático — ele escolhe o especialista sozinho)
-    <select id="agentSel">
-      <option value="auto">Automático (escolhe o agente sozinho)</option>
-      <option value="navegador">Navegador</option>
-      <option value="pesquisador">Pesquisador</option>
-      <option value="leitor">Leitor</option>
-      <option value="preenchedor">Preenchedor</option>
-      <option value="social">Social</option>
-      <option value="acesso">Acesso</option>
-      <option value="extrator">Extrator (listas/tabelas)</option>
-      <option value="painel">Painel (relatórios/dashboards)</option>
-      <option value="monitor">Monitor (mudanças)</option>
-      <option value="comparador">Comparador (multi-fontes)</option>
-      <option value="agendador">Agendador (reservas/horários)</option>
-      <option value="candidato">Candidato (vagas)</option>
-      <option value="coletor">Coletor (arquivos/faturas)</option>
-      <option value="rastreador">Rastreador (pedidos)</option>
-    </select>
-  </label>
+  <div id="grpAgente">
+    <label>Modo do agente (deixe em Automático — ele escolhe o especialista sozinho)
+      <select id="agentSel">
+        <option value="auto">Automático (escolhe o agente sozinho)</option>
+        <option value="navegador">Navegador</option>
+        <option value="pesquisador">Pesquisador</option>
+        <option value="leitor">Leitor</option>
+        <option value="preenchedor">Preenchedor</option>
+        <option value="social">Social</option>
+        <option value="acesso">Acesso</option>
+        <option value="extrator">Extrator (listas/tabelas)</option>
+        <option value="painel">Painel (relatórios/dashboards)</option>
+        <option value="monitor">Monitor (mudanças)</option>
+        <option value="comparador">Comparador (multi-fontes)</option>
+        <option value="agendador">Agendador (reservas/horários)</option>
+        <option value="candidato">Candidato (vagas)</option>
+        <option value="coletor">Coletor (arquivos/faturas)</option>
+        <option value="rastreador">Rastreador (pedidos)</option>
+      </select>
+    </label>
+  </div>
   <button id="btnClearHistory" style="background: #f44336; color: white;">🗑 Limpar histórico</button>
   <button id="btnSave">Salvar</button>
 </div>
