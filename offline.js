@@ -211,11 +211,17 @@ async function runOfflineAgent(task, tools_available, onProgress) {
       // turno, a partir do texto completo — sem duplicar lógica nem exigir handler novo.
       const toolParaEnviar = toolName === "extrair" ? "ler" : toolName;
 
+      // Sem timeout aqui, um background.js que nunca chama sendResponse trava esta Promise
+      // pra sempre — e junto com ela o loop inteiro do agente offline (mesmo bug do tool()
+      // do modo online em sidepanel.js: ver o comentário de sendMessageWithTimeout lá).
       let toolResult;
       try {
-        toolResult = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolParaEnviar, args: toolArgs, windowId: typeof myWindowId !== "undefined" ? myWindowId : undefined }, resolve);
-        });
+        toolResult = await Promise.race([
+          new Promise((resolve) => {
+            chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolParaEnviar, args: toolArgs, windowId: typeof myWindowId !== "undefined" ? myWindowId : undefined }, resolve);
+          }),
+          new Promise((resolve) => setTimeout(() => resolve({ ok: false, error: "timeout: service worker não respondeu em 20s" }), 20000))
+        ]);
       } catch (e) {
         toolResult = { ok: false, error: e.message };
       }

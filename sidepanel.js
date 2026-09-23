@@ -680,12 +680,39 @@ function repairJson(s) {
 }
 
 // reenvia se o service worker MV3 tiver morrido (o próprio reenvio o reacorda)
+// chrome.runtime.sendMessage() não tem timeout nativo: se o service worker travar ou
+// nunca chamar sendResponse (ex.: exceção não tratada num handler async), a Promise fica
+// pendente PRA SEMPRE. Sem isto, um único tool() travado deixava "agentRun" sem nunca
+// voltar a null — e como send() só executa uma tarefa nova se "agentRun" for null, toda
+// mensagem seguinte do usuário era silenciosamente ignorada (sem status, sem erro, sem
+// nada na tela: exatamente o "não tá respondendo" que parecia bug de UI mas era um
+// tool() pendurado no fundo).
+function sendMessageWithTimeout(msg, ms = 20000) {
+  const racers = [
+    chrome.runtime.sendMessage(msg),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout: service worker não respondeu em " + (ms / 1000) + "s")), ms))
+  ];
+  // se o usuário clicar ■ (parar) enquanto isto está pendurado, não faz sentido esperar
+  // os 20s inteiros — aborta na hora, senão o botão "parar" pareceria não fazer nada.
+  const sig = agentRun?.abort?.signal;
+  if (sig) racers.push(new Promise((_, reject) => sig.addEventListener("abort", () => reject(Object.assign(new Error("parado"), { name: "AbortError" })), { once: true })));
+  return Promise.race(racers);
+}
+
 async function tool(t, args) {
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: t, args, windowId: myWindowId });
+      const r = await sendMessageWithTimeout({ type: "AGENT_TOOL", tool: t, args, windowId: myWindowId });
       if (r !== undefined) return r;
-    } catch { /* canal fechou: worker dormiu */ }
+    } catch (e) {
+      // AbortSignal já abortado não dispara o listener de novo numa retentativa (o evento só
+      // acontece uma vez) — sem este retorno imediato, a 1ª tentativa cancelava na hora, mas a
+      // 2ª e 3ª voltavam a esperar os 20s inteiros do timeout, porque agentRun.abort.signal já
+      // estava "aborted" e não reemite o evento. Cancelamento é definitivo: não faz sentido
+      // insistir depois que o usuário pediu pra parar.
+      if (e.name === "AbortError") return { ok: false, error: "parado pelo usuário" };
+      /* canal fechou ou expirou: worker dormiu/travado — tenta de novo */
+    }
     await sleep(300);
   }
   return { ok: false, error: "service worker não respondeu (recarregue a extensão em chrome://extensions)" };
