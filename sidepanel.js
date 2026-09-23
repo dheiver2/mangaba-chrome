@@ -1007,6 +1007,43 @@ async function runAgent(task) {
   status.textContent = "Planejando...";
   chat.appendChild(status);
   const box = stepsBox();
+
+  // Modo offline (WebLLM): motor local completamente diferente do fluxo normal a seguir
+  // (sem gateway, sem plano/pickAgent, tool-calling nativo do modelo local) — desvia aqui
+  // antes de qualquer chamada ao gateway. Sem este desvio, "offlineMode" nunca era lido em
+  // lugar nenhum do fluxo principal: o modo offline "ligava" (baixava o modelo) mas todo
+  // agente continuava indo pro gateway normal, silenciosamente.
+  if (typeof offlineMode !== "undefined" && offlineMode) {
+    let statusTxtOff = "Processando localmente (WebLLM)";
+    const tickOff = setInterval(() => { if (statusTxtOff) status.textContent = `${statusTxtOff} · ${secs()}s`; }, 1000);
+    box.add("Rodando localmente via WebLLM (sem gateway)");
+    try {
+      const r = await runOfflineAgent(task, null, (report) => {
+        const pct = Math.round((report?.progress || 0) * 100);
+        statusTxtOff = report?.text ? `${report.text} (${pct}%)` : "Processando localmente (WebLLM)";
+      });
+      statusTxtOff = null;
+      status.textContent = `Concluído (local) · ${r.steps} passo(s) · ${secs()}s`;
+      box.det.open = false;
+      if (r.ok) {
+        addMsg("assistant", r.result);
+        agentHistory.push({ task, resposta: r.result });
+      } else {
+        addMsg("err", "Modo offline: " + r.error);
+      }
+    } catch (e) {
+      statusTxtOff = null;
+      status.textContent = `Erro (local) · ${secs()}s`;
+      addMsg("err", "Modo offline: " + e.message);
+    } finally {
+      clearInterval(tickOff);
+      agentRun = null;
+      setStop(false);
+      input.placeholder = "Pergunte algo...";
+    }
+    return;
+  }
+
   let statusTxt = "Planejando";
   const tick = setInterval(() => {
     if (statusTxt) status.textContent = `${statusTxt} · ${secs()}s`;
@@ -1493,7 +1530,11 @@ async function runAgent(task) {
           (visited.length > 1 ? `\nPáginas já visitadas: ${visited.slice(-5).join(" → ")}\n` : "") +
           `\nEstado ATUAL da página:\n${contexto}\n` +
           `\nQual a próxima ação? Responda somente o JSON.` }
-      ], 700, agentRun.abort.signal);
+      // 700 fixo cortava respostas no meio do JSON quando o nome/argumentos da ferramenta
+      // são longos (ex.: chamadas MCP tipo {"tool":"mcp","args":{"ferramenta":"read_wiki_...
+      // Usa a config do usuário quando ela pede mais, mas nunca menos que 700 (o campo é
+      // pensado pro chat normal, e um valor baixo ali não deve truncar decisões de ação).
+      ], Math.max(cfg.maxTokens || 0, 700), agentRun.abort.signal);
 
       if (agentRun.cancel) break; // parou durante a chamada: não executa a ação pendente
 
