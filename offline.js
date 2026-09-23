@@ -76,6 +76,26 @@ async function toggleOfflineMode(enable, onProgress) {
   OFFLINE_CONFIG.enabled = true;
 }
 
+// Formata o resultado de uma ferramenta para texto legível pelo modelo. "snapshot" retorna um
+// objeto {url,title,elements,trecho} do background.js — sem isso, String(objeto) vira
+// "[object Object]" e o modelo nunca vê os elementos da página (índices [i] para clicar/digitar),
+// tornando a ferramenta inútil no modo offline (o modo principal formata isso via fmtSnapshot()
+// do sidepanel.js, que offline.js não pode chamar por carregar antes dela no HTML).
+function formatToolOutput(toolName, out) {
+  if (typeof out === "string") return out;
+  if (toolName === "snapshot" && out?.elements) {
+    const linhas = out.elements.map((el) => {
+      let l = `[${el.i}] ${el.tag}${el.tipo ? ":" + el.tipo : ""} "${el.texto || ""}"`;
+      if (el.href) l += ` → ${el.href}`;
+      if (el.valor) l += ` (valor: "${el.valor}")`;
+      return l;
+    }).join("\n");
+    return `Página: ${out.title} — ${out.url}\nElementos interativos:\n${linhas}\nTrecho: ${out.trecho || ""}`;
+  }
+  // fallback seguro para qualquer outro objeto inesperado: nunca deixa virar "[object Object]"
+  try { return JSON.stringify(out); } catch { return String(out); }
+}
+
 // Extrai o primeiro objeto JSON balanceado de um texto — usado só como rede de segurança
 // quando o modelo não preenche tool_calls estruturado mas escreve o JSON como texto solto.
 function extractJsonAction(text) {
@@ -184,10 +204,16 @@ async function runOfflineAgent(task, tools_available, onProgress) {
         break;
       }
 
+      // "extrair" não tem handler próprio no background.js (lá ela é tratada só no modo
+      // principal, que faz uma chamada LLM extra dedicada). Aqui o modelo já é local: manda
+      // "ler" por baixo dos panos e deixa o próprio modelo extrair o que precisa no próximo
+      // turno, a partir do texto completo — sem duplicar lógica nem exigir handler novo.
+      const toolParaEnviar = toolName === "extrair" ? "ler" : toolName;
+
       let toolResult;
       try {
         toolResult = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolName, args: toolArgs, windowId: typeof myWindowId !== "undefined" ? myWindowId : undefined }, resolve);
+          chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolParaEnviar, args: toolArgs, windowId: typeof myWindowId !== "undefined" ? myWindowId : undefined }, resolve);
         });
       } catch (e) {
         toolResult = { ok: false, error: e.message };
@@ -196,7 +222,7 @@ async function runOfflineAgent(task, tools_available, onProgress) {
       messages.push({
         role: "tool",
         tool_call_id: call.id,
-        content: toolResult?.ok ? String(toolResult.out).slice(0, 1500) : `ERRO: ${toolResult?.error || "?"}`
+        content: toolResult?.ok ? formatToolOutput(toolParaEnviar, toolResult.out).slice(0, 1500) : `ERRO: ${toolResult?.error || "?"}`
       });
     }
 

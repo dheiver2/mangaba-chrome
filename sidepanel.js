@@ -991,6 +991,8 @@ function describeAction(act, label) {
     case "selecionar": return `Selecionando "${a.opcao}"${alvo}`;
     case "marcar": return `${a.valor === false ? "Desmarcando" : "Marcando"}${alvo}`;
     case "curtir": return `Curtindo${alvo}`;
+    case "ler_varias": return `Lendo ${(a.urls || []).length} fontes em paralelo`;
+    case "lembrar": return `Memorizando: ${a.chave || "?"}`;
     default: return `${act.tool}`;
   }
 }
