@@ -389,19 +389,9 @@ async function waitLoad(tabId, ms = 10000) {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.type !== "GET_PAGE_CONTEXT" && msg.type !== "AGENT_TOOL") return;
+  if (msg.type !== "AGENT_TOOL") return;
   (async () => {
     try {
-      if (msg.type === "GET_PAGE_CONTEXT") {
-        const tab = await getTab(msg.windowId);
-        const page = await exec(tab.id, () => ({
-          title: document.title,
-          url: location.href,
-          text: (document.body?.innerText || "").slice(0, 12000)
-        }));
-        sendResponse({ ok: true, page });
-        return;
-      }
       const { tool, args = {} } = msg;
       let out;
       if (tool === "esperar") {

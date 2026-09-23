@@ -2,7 +2,6 @@ const $ = (id) => document.getElementById(id);
 const chat = $("chat");
 const input = $("input");
 const btnSend = $("btnSend");
-const history = [];      // chat normal {role, content}
 const agentHistory = []; // modo agente {task, resposta}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1659,30 +1658,6 @@ async function runAgent(task) {
   }
 }
 
-// decide automaticamente se o pedido é AÇÃO (usa agente) ou PERGUNTA (chat com contexto)
-function precisaAgente(task) {
-  const t = task.toLowerCase().trim();
-  // começa com palavra de pergunta/leitura → é chat, mesmo que cite um verbo de ação
-  if (/^(o que|que |qual|quais|quem|como |por que|porqu|quando|onde|quant|explique?|explica|resum|traduz|defina|defini|o significado|significa|me diga|diga-me|voc[êe] (sabe|acha|pode explicar))/.test(t)) return false;
-  // verbos de ação no navegador → agente (casa o início do verbo, cobrindo conjugações: coment→comente, curt→curta...)
-  if (/\b(abr|acess|naveg|cliqu|clica|coment|curt|pesquis|busqu|busca|procur|preench|selecion|marqu|inscrev|assin|publi|postar|post[ae]|envi[ae]|enviar|respond|fa[çc]a login|login|logar|baix|extrai|coloqu|adicion|digit|escrev|v[áa] (para|at[ée]|no|na|ao))/.test(t)) return true;
-  // URL/domínio/plataforma citada → agente
-  if (/https?:\/\/|www\.|\b[\w-]+\.(com|br|net|org|io|tv)\b|youtube|instagram|gmail|twitter|\bx\.com|linkedin|whatsapp|facebook/.test(t)) return true;
-  return false; // padrão: chat (responder com o contexto da página)
-}
-
-// ---------- CHAT ----------
-let pageCtxCache = null; // {t, ctx} — evita reextrair a página em perguntas seguidas
-async function getPageContext() {
-  if (pageCtxCache && Date.now() - pageCtxCache.t < 5000) return pageCtxCache.ctx;
-  const res = await chrome.runtime.sendMessage({ type: "GET_PAGE_CONTEXT", windowId: myWindowId });
-  if (!res?.ok) return null;
-  const { title, url, text } = res.page;
-  const ctx = `Contexto da página aberta:\nTítulo: ${title}\nURL: ${url}\nConteúdo:\n${text}`;
-  pageCtxCache = { t: Date.now(), ctx };
-  return ctx;
-}
-
 async function send() {
   const question = input.value.trim();
   if (!question) return;
@@ -1701,87 +1676,7 @@ async function send() {
 
   input.value = ""; input.style.height = "";
   addMsg("user", question);
-
-  try {
-    // decide sozinho: pedido de AÇÃO → agente; PERGUNTA → chat com contexto da página
-    if (precisaAgente(question)) {
-      await runAgent(question);
-      return;
-    }
-    btnSend.disabled = true;
-    const messages = [{
-      role: "system",
-      content: "Você é a Mangaba, assistente de IA brasileira. Responda em português do Brasil, de forma clara e objetiva. Use Markdown quando ajudar (títulos, listas, tabelas). Evite emojis decorativos — prefira texto limpo e profissional."
-    }];
-    const ctx = await getPageContext(); // sempre usa o contexto da página no chat
-    if (ctx) messages.push({ role: "system", content: ctx });
-    messages.push(...history.slice(-12), { role: "user", content: question }); // só as últimas trocas: o histórico não pode crescer sem limite (estoura o contexto do GGUF local)
-
-    const bubble = addMsg("assistant", "…");
-    let answer = "";
-
-    // Modo offline (WebLLM): sem isto, o chat normal SEMPRE ia pro gateway mesmo com o
-    // modo offline ativo — o contexto da página era lido certinho (getPageContext já
-    // funciona), mas a pergunta em si nunca chegava ao modelo local, só ao gateway (que
-    // pode nem estar configurado se o usuário optou por rodar só localmente).
-    if (typeof offlineMode !== "undefined" && offlineMode) {
-      try {
-        answer = await runOfflineChat(messages, (partial) => setAssistant(bubble, partial));
-      } catch (e) {
-        (bubble.closest(".arow") || bubble).remove();
-        throw new Error("Modo offline: " + e.message);
-      }
-    } else {
-      const headers = gatewayHeaders();
-      await ensureModel(headers);
-      let resp;
-      try {
-        // Timeout só cobre até a resposta inicial (headers); a leitura do stream depois não tem limite,
-        // já que uma resposta longa pode legitimamente levar mais tempo chegando aos poucos.
-        resp = await fetchWithTimeout(cfg.url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true, max_tokens: cfg.maxTokens, temperature: cfg.temperature })
-        }, 45000);
-      } catch (e) {
-        (bubble.closest(".arow") || bubble).remove();
-        if (e.name === "TimeoutError") throw new Error("Gateway não respondeu em 45s. Verifique se o servidor está online ou se o modelo está em cold-start.");
-        throw e;
-      }
-      if (!resp.ok) { (bubble.closest(".arow") || bubble).remove(); throw new Error(`HTTP ${resp.status}: ${(await resp.text()).slice(0, 200)}`); }
-
-      if (resp.headers.get("content-type")?.includes("event-stream")) {
-        const reader = resp.body.getReader();
-        const dec = new TextDecoder();
-        let buf = "";
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += dec.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop();
-          for (const line of lines) {
-            const data = line.replace(/^data:\s*/, "").trim();
-            if (!data || data === "[DONE]") continue;
-            try {
-              const delta = JSON.parse(data).choices?.[0]?.delta?.content;
-              if (delta) { answer += delta; setAssistant(bubble, answer); }
-            } catch { /* linha parcial */ }
-          }
-        }
-      } else {
-        const json = await resp.json();
-        answer = json.choices?.[0]?.message?.content || JSON.stringify(json).slice(0, 500);
-        setAssistant(bubble, answer);
-      }
-    }
-    history.push({ role: "user", content: question }, { role: "assistant", content: answer });
-  } catch (e) {
-    addMsg("err", "Erro: " + e.message);
-  } finally {
-    btnSend.disabled = false;
-    input.focus();
-  }
+  await runAgent(question);
 }
 
 btnSend.onclick = () => {
