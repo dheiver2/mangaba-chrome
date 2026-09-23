@@ -1,6 +1,6 @@
 {
   "name": "mangaba-chrome",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Assistente brasileira no navegador com agentes de IA autônomos",
   "scripts": {
     "build": "bash build.sh prod",
