@@ -19,6 +19,13 @@ cp manifest.json "$DIST_DIR/"
 cp *.html "$DIST_DIR/"
 cp *.css "$DIST_DIR/" 2>/dev/null || true
 
+# lib/ (WebLLM vendorizado): copia sem passar pelo terser — é um bundle de terceiros
+# já otimizado; minificar de novo arrisca quebrar algo sutil sem ganho real de tamanho.
+if [ -d lib ]; then
+  cp -r lib "$DIST_DIR/"
+  echo "📦 lib/ (WebLLM) copiada sem reminificar"
+fi
+
 echo "📦 Arquivo estáticos copiados"
 
 # Minificar HTML

@@ -1,11 +1,20 @@
-// ---- MODO OFFLINE v2.0.0 ----
-// Agente local via llama.cpp (Qwen 1B quantizado)
-// Tool-calling nativo: agente pode chamar browser tools diretamente
+// ---- MODO OFFLINE v2.1.0 ----
+// Dois provedores de IA local, sem depender do gateway:
+// - "llamacpp": servidor externo em localhost:8778 (já exigia setup prévio do usuário)
+// - "webllm": modelo rodando DENTRO do navegador via WebGPU (@mlc-ai/web-llm, vendorizada
+//   em lib/web-llm.js — Manifest V3 proíbe código remotamente hospedado, então a lib em si
+//   vem junto da extensão; só os PESOS do modelo são baixados sob demanda do Hugging Face
+//   na primeira vez e ficam em cache do navegador depois). Zero setup externo.
+// Tool-calling: só llama.cpp usa o formato nativo `tools` da API; o WebLLM usa o mesmo
+// padrão "responda com um JSON de ação" do modo agente principal, porque o modelo pequeno
+// (Llama-3.2-1B) não está na lista de modelos com function-calling nativo do WebLLM.
 
 const OFFLINE_CONFIG = {
   enabled: false,
+  provider: "llamacpp",  // "llamacpp" | "webllm"
   model_url: "http://localhost:8778",  // llama.cpp padrão
   model_name: "qwen-1b-q8",
+  webllm_model: "Llama-3.2-1B-Instruct-q4f16_1-MLC",
   max_tokens: 500,
   temperature: 0.3,
   timeout: 30000
@@ -25,21 +34,53 @@ function offlineFetchWithTimeout(url, opts = {}, ms = 30000) {
     .finally(() => clearTimeout(timer));
 }
 
-// Detectar llama.cpp disponível
+// ---- Dispatchers: escolhem o provedor configurado ----
+
 async function detectOfflineModel() {
+  return OFFLINE_CONFIG.provider === "webllm" ? detectWebLLM() : detectLlamaCpp();
+}
+
+async function runOfflineAgent(task, tools_available) {
+  return OFFLINE_CONFIG.provider === "webllm"
+    ? runOfflineAgentWebLLM(task, tools_available)
+    : runOfflineAgentLlamaCpp(task, tools_available);
+}
+
+// Ativar/desativar modo offline (onProgress só é usado pelo provedor webllm, no download do modelo)
+async function toggleOfflineMode(enable, onProgress) {
+  if (!enable) {
+    offlineMode = false;
+    OFFLINE_CONFIG.enabled = false;
+    return;
+  }
+  const available = await detectOfflineModel();
+  if (!available) {
+    if (OFFLINE_CONFIG.provider === "webllm") {
+      throw new Error(typeof navigator !== "undefined" && navigator.gpu
+        ? "Falha ao preparar o modelo no navegador (veja o console)"
+        : "Este navegador não suporta WebGPU — o modo WebLLM não funciona aqui. Use o llama.cpp ou um Chrome/Edge recente.");
+    }
+    throw new Error("llama.cpp não encontrado em localhost:8778");
+  }
+  offlineMode = true;
+  OFFLINE_CONFIG.enabled = true;
+}
+
+// ================= Provedor: llama.cpp (servidor externo) =================
+
+async function detectLlamaCpp() {
   try {
     const resp = await offlineFetchWithTimeout(`${OFFLINE_CONFIG.model_url}/v1/models`, {}, 3000);
     if (resp.ok) {
       const data = await resp.json();
-      offlineMode = data.data?.length > 0;
-      return offlineMode;
+      return data.data?.length > 0;
     }
   } catch { }
   return false;
 }
 
 // Tool-calling loop local: agente chama tools, executa, itera
-async function runOfflineAgent(task, tools_available) {
+async function runOfflineAgentLlamaCpp(task, tools_available) {
   const messages = [
     {
       role: "system",
@@ -160,15 +201,7 @@ Quando terminar, use "concluir" com o resultado.`
   };
 }
 
-// Hook no background.js para suportar offline
-// Modificar handler de AGENT_TOOL para rotear offline quando mode ativo
-async function handleOfflineTool(tool, args) {
-  // Encaminhar ao offline agent loop
-  // Implementar no background.js message handler
-  return { ok: false, error: "offline tool routing não implementado" };
-}
-
-// Esquema de ferramentas em JSON Schema (para tool-calling)
+// Esquema de ferramentas em JSON Schema (usado pelo provedor llama.cpp, que aceita `tools` nativo)
 const TOOLS_SCHEMA = [
   {
     type: "function",
@@ -231,17 +264,140 @@ const TOOLS_SCHEMA = [
   }
 ];
 
-// Ativar/desativar modo offline
-async function toggleOfflineMode(enable) {
-  if (enable) {
-    const available = await detectOfflineModel();
-    if (!available) {
-      throw new Error("llama.cpp não encontrado em localhost:8778");
-    }
-    offlineMode = true;
-    OFFLINE_CONFIG.enabled = true;
-  } else {
-    offlineMode = false;
-    OFFLINE_CONFIG.enabled = false;
+// ================= Provedor: WebLLM (WebGPU, dentro do navegador) =================
+
+let webllmEngine = null;
+let webllmModulePromise = null;
+let webllmLoadingPromise = null;
+
+async function detectWebLLM() {
+  return typeof navigator !== "undefined" && !!navigator.gpu;
+}
+
+// Import dinâmico do módulo local vendorizado — nunca de CDN: MV3 proíbe código remoto.
+function loadWebLLMModule() {
+  if (!webllmModulePromise) {
+    webllmModulePromise = import(chrome.runtime.getURL("lib/web-llm.js"));
   }
+  return webllmModulePromise;
+}
+
+// Cria (ou reaproveita) a engine. onProgress recebe {progress: 0-1, text} durante o
+// download/carregamento do modelo — só acontece de fato na primeira vez (fica em cache depois).
+async function ensureWebLLMEngine(onProgress) {
+  if (webllmEngine) return webllmEngine;
+  if (webllmLoadingPromise) return webllmLoadingPromise;
+
+  webllmLoadingPromise = (async () => {
+    const webllm = await loadWebLLMModule();
+    const engine = await webllm.CreateMLCEngine(OFFLINE_CONFIG.webllm_model, {
+      initProgressCallback: (report) => { if (onProgress) onProgress(report); }
+    });
+    webllmEngine = engine;
+    return engine;
+  })();
+
+  try {
+    return await webllmLoadingPromise;
+  } finally {
+    webllmLoadingPromise = null;
+  }
+}
+
+// Extrai o primeiro objeto JSON balanceado de um texto (versão simples e isolada de
+// parseAction do sidepanel.js — não reaproveitamos aquela porque offline.js carrega antes
+// dela no HTML, e este uso não precisa do suporte a lotes/thinking-tags que ela trata).
+function extractJsonAction(text) {
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (esc) { esc = false; continue; }
+    if (c === "\\") { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(text.slice(start, i + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
+// Llama-3.2-1B não tem function-calling nativo no WebLLM — documenta as ferramentas como
+// texto no prompt (mesmo padrão do modo agente principal) em vez de usar `tools` da API.
+function toolsSchemaToPromptDoc(tools) {
+  return tools.map((t) => {
+    const f = t.function;
+    const props = f.parameters?.properties ? Object.keys(f.parameters.properties) : [];
+    const argsExample = props.length ? `{${props.map((p) => `"${p}":...`).join(",")}}` : "{}";
+    return `{"tool":"${f.name}","args":${argsExample}} — ${f.description}`;
+  }).join("\n");
+}
+
+async function runOfflineAgentWebLLM(task, tools_available, onProgress) {
+  const engine = await ensureWebLLMEngine(onProgress);
+  const toolsDoc = toolsSchemaToPromptDoc(tools_available || TOOLS_SCHEMA);
+
+  const messages = [
+    {
+      role: "system",
+      content: `Você é agente autônomo offline da Mangaba AI, rodando localmente no navegador (WebLLM).
+Responda SEMPRE com um único objeto JSON de ação, sem texto fora dele:
+${toolsDoc}
+
+Você é LOCAL — use APENAS as ferramentas acima na aba ativa. Tarefa: ${task}
+Quando terminar, responda {"tool":"concluir","args":{"resposta":"..."}}.`
+    },
+    { role: "user", content: task }
+  ];
+
+  const MAX_STEPS = 20;
+  for (let step = 1; step <= MAX_STEPS; step++) {
+    let content;
+    try {
+      const resp = await engine.chat.completions.create({
+        messages,
+        max_tokens: OFFLINE_CONFIG.max_tokens,
+        temperature: OFFLINE_CONFIG.temperature
+      });
+      content = resp.choices?.[0]?.message?.content || "";
+    } catch (e) {
+      return { ok: false, error: "WebLLM: " + e.message, steps: step };
+    }
+
+    const action = extractJsonAction(content);
+    if (!action?.tool) {
+      messages.push({ role: "assistant", content });
+      messages.push({ role: "user", content: 'Responda EXATAMENTE com {"tool":"nome","args":{...}}, sem texto fora do JSON.' });
+      continue;
+    }
+
+    if (action.tool === "concluir") {
+      return { ok: true, result: action.args?.resposta || content, steps: step };
+    }
+
+    let tool_result;
+    try {
+      tool_result = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: action.tool, args: action.args || {} }, resolve);
+      });
+    } catch (e) {
+      tool_result = { ok: false, error: e.message };
+    }
+
+    messages.push({ role: "assistant", content });
+    messages.push({
+      role: "user",
+      content: tool_result?.ok
+        ? `Resultado de "${action.tool}": ${String(tool_result.out).slice(0, 1500)}`
+        : `ERRO em "${action.tool}": ${tool_result?.error || "?"}`
+    });
+  }
+
+  return { ok: false, error: `Excedeu ${MAX_STEPS} passos`, steps: MAX_STEPS };
 }

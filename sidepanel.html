@@ -37,9 +37,16 @@
   </label>
   <hr>
   <h3>⚙️ Avançado</h3>
-  <label>Modo Offline (llama.cpp em localhost:8778)
-    <input id="cfgOffline" type="checkbox"> Ativar (agente local, sem gateway)
+  <label>Modo Offline — agente local, sem gateway
+    <input id="cfgOffline" type="checkbox"> Ativar
   </label>
+  <label>Provedor do modo offline
+    <select id="cfgOfflineProvider">
+      <option value="llamacpp">llama.cpp (servidor externo em localhost:8778)</option>
+      <option value="webllm">WebLLM (roda no próprio navegador via WebGPU, zero setup — baixa ~800MB na 1ª vez)</option>
+    </select>
+  </label>
+  <div id="offlineProgress" style="display: none; margin: 4px 0; font-size: 12px; color: #666;"></div>
   <label>Temperatura do modelo (criatividade: 0.0–1.0, padrão 0.0)
     <input id="cfgTemperature" type="number" min="0" max="1" step="0.1" value="0">
   </label>
