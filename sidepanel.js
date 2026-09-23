@@ -1364,7 +1364,6 @@ async function runAgent(task) {
       // ---- DETECÇÃO DE DEADLOCK: Verificar antes de executar ----
       if (detectDeadlock(act)) {
         deadlockWarnings++;
-        const snap = snapRes?.ok ? snapRes.out : null;
         const diagnostico = diagnosticaDeadlock(act, snap);
 
         if (deadlockWarnings >= MAX_DEADLOCK_WARNINGS) {
