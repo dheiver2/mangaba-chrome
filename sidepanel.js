@@ -1627,7 +1627,7 @@ async function send() {
       resp = await fetchWithTimeout(cfg.url, {
         method: "POST",
         headers,
-        body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true })
+        body: JSON.stringify({ model: cfg.model, messages, stream: true, cache_prompt: true, max_tokens: cfg.maxTokens, temperature: cfg.temperature })
       }, 45000);
     } catch (e) {
       (bubble.closest(".arow") || bubble).remove();
