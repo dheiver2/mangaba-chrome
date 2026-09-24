@@ -215,15 +215,18 @@ async function runOfflineAgent(task, tools_available, onProgress) {
       // pra sempre — e junto com ela o loop inteiro do agente offline (mesmo bug do tool()
       // do modo online em sidepanel.js: ver o comentário de sendMessageWithTimeout lá).
       let toolResult;
+      let toolTimer;
       try {
         toolResult = await Promise.race([
           new Promise((resolve) => {
             chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolParaEnviar, args: toolArgs, windowId: typeof myWindowId !== "undefined" ? myWindowId : undefined }, resolve);
           }),
-          new Promise((resolve) => setTimeout(() => resolve({ ok: false, error: "timeout: service worker não respondeu em 20s" }), 20000))
+          new Promise((resolve) => { toolTimer = setTimeout(() => resolve({ ok: false, error: "timeout: service worker não respondeu em 20s" }), 20000); })
         ]);
       } catch (e) {
         toolResult = { ok: false, error: e.message };
+      } finally {
+        clearTimeout(toolTimer); // Promise.race não cancela o timer perdedor sozinho
       }
 
       messages.push({

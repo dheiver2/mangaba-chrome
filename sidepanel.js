@@ -688,15 +688,24 @@ function repairJson(s) {
 // nada na tela: exatamente o "não tá respondendo" que parecia bug de UI mas era um
 // tool() pendurado no fundo).
 function sendMessageWithTimeout(msg, ms = 20000) {
-  const racers = [
-    chrome.runtime.sendMessage(msg),
-    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout: service worker não respondeu em " + (ms / 1000) + "s")), ms))
-  ];
+  let timer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timeout: service worker não respondeu em " + (ms / 1000) + "s")), ms);
+  });
+  const racers = [chrome.runtime.sendMessage(msg), timeoutPromise];
   // se o usuário clicar ■ (parar) enquanto isto está pendurado, não faz sentido esperar
   // os 20s inteiros — aborta na hora, senão o botão "parar" pareceria não fazer nada.
   const sig = agentRun?.abort?.signal;
-  if (sig) racers.push(new Promise((_, reject) => sig.addEventListener("abort", () => reject(Object.assign(new Error("parado"), { name: "AbortError" })), { once: true })));
-  return Promise.race(racers);
+  let onAbort;
+  if (sig) racers.push(new Promise((_, reject) => { onAbort = () => reject(Object.assign(new Error("parado"), { name: "AbortError" })); sig.addEventListener("abort", onAbort, { once: true }); }));
+  // Promise.race não cancela quem perdeu: sem este cleanup, CADA chamada deixa um
+  // setTimeout de 20s (e um listener no AbortSignal) pendurado até o fim do prazo mesmo
+  // depois de já ter resolvido rápido pelo outro lado — um vazamento pequeno mas que se
+  // acumula ao longo de uma tarefa com muitos passos.
+  return Promise.race(racers).finally(() => {
+    clearTimeout(timer);
+    if (sig && onAbort) sig.removeEventListener("abort", onAbort);
+  });
 }
 
 async function tool(t, args) {
@@ -879,9 +888,13 @@ function updateMcpStatus(cat) {
   mcpStatus.style.display = "block";
   mcpList.innerHTML = cat.map((c) => {
     const emoji = c.erro ? "❌" : "✅";
-    const status = c.erro ? `offline: ${c.erro.slice(0, 30)}...` : `${c.tools?.length || 0} ferramentas`;
+    // c.erro pode vir do corpo de erro JSON-RPC devolvido pelo PRÓPRIO servidor MCP (não é
+    // texto nosso) — um servidor malicioso/comprometido poderia colocar HTML/script ali. c.nome
+    // vem da configuração do usuário, mas escapamos os dois por igual: innerHTML nunca deve
+    // receber texto de fora sem passar por esc() primeiro.
+    const status = c.erro ? `offline: ${esc(c.erro.slice(0, 30))}...` : `${c.tools?.length || 0} ferramentas`;
     return `<div style="padding: 6px; border-bottom: 1px solid #ddd; font-size: 11px;">
-      ${emoji} <strong>${c.nome}</strong> — ${status}
+      ${emoji} <strong>${esc(c.nome)}</strong> — ${status}
     </div>`;
   }).join("");
 }
@@ -1401,7 +1414,11 @@ async function runAgent(task) {
         const diagnostico = diagnosticaDeadlock(act, snap);
 
         if (deadlockWarnings >= MAX_DEADLOCK_WARNINGS) {
-          // Deadlock confirmado: PARAR
+          // Deadlock confirmado: PARAR. "return;" aqui só sai de handleAct() (é uma função
+          // aninhada) — o chamador só trata "FINISH"/"BREAK" como sinal especial, então um
+          // "return" solto virava undefined e o loop principal CONTINUAVA rodando por conta
+          // própria até os 20 passos, reimprimindo esta mesma mensagem de erro a cada passo
+          // em vez de realmente parar como o texto "parado em passo X" prometia.
           statusTxt = null;
           status.textContent = `🔄 Deadlock detectado · ${box.n} passos`;
           addMsg("err",
@@ -1412,7 +1429,7 @@ async function runAgent(task) {
             `Tente dividir em pedidos menores ou pergunte os dados manualmente.`
           );
           box.add(`Deadlock detectado — parado em passo ${passo}`);
-          return;
+          return "FINISH";
         } else {
           // Primeiro aviso
           box.add(`⚠️ Loop detectado: repetindo "${act.tool}". Se continuar, vou parar. Verifique se tudo está OK.`);
