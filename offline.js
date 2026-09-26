@@ -157,19 +157,26 @@ const TOOLS_SCHEMA = [
 
 // Envia uma ferramenta ao background.js com timeout (Promise.race não cancela quem perde,
 // por isso o clearTimeout no finally — mesmo padrão de sendMessageWithTimeout em sidepanel.js).
+// Também corre contra agentRun.abort.signal: sem isso, clicar em ■ (parar) enquanto uma
+// ferramenta está pendurada no modo offline podia demorar até 20s pra responder, em vez de
+// ser instantâneo como no modo online.
 async function enviarFerramentaOffline(toolParaEnviar, toolArgs) {
-  let toolTimer;
+  let toolTimer, onAbort;
+  const sig = typeof agentRun !== "undefined" ? agentRun?.abort?.signal : null;
   try {
-    return await Promise.race([
+    const racers = [
       new Promise((resolve) => {
         chrome.runtime.sendMessage({ type: "AGENT_TOOL", tool: toolParaEnviar, args: toolArgs, windowId: typeof myWindowId !== "undefined" ? myWindowId : undefined }, resolve);
       }),
       new Promise((resolve) => { toolTimer = setTimeout(() => resolve({ ok: false, error: "timeout: service worker não respondeu em 20s" }), 20000); })
-    ]);
+    ];
+    if (sig) racers.push(new Promise((resolve) => { onAbort = () => resolve({ ok: false, error: "parado pelo usuário" }); sig.addEventListener("abort", onAbort, { once: true }); }));
+    return await Promise.race(racers);
   } catch (e) {
     return { ok: false, error: e.message };
   } finally {
     clearTimeout(toolTimer);
+    if (sig && onAbort) sig.removeEventListener("abort", onAbort);
   }
 }
 
@@ -200,6 +207,7 @@ async function runOfflineAgent(task, tools_available, onProgress) {
   const MAX_REPEAT = 3;
   let lastSnap = null; // snapshot mais recente — usado só pra achar o rótulo do índice [i] clicado/digitado
   let ultimoTexto = "";
+  const captchaPausado = new Set(); // URLs onde já pausou p/ CAPTCHA NESTA tarefa (mesmo padrão do modo online: não persiste entre tarefas, só sessionStorage faria isso e nunca liberaria de novo)
 
   for (let step = 1; step <= MAX_STEPS; step++) {
     if (typeof agentRun !== "undefined" && agentRun?.cancel) return { ok: false, error: "parado pelo usuário", steps: step };
@@ -322,13 +330,10 @@ async function runOfflineAgent(task, tools_available, onProgress) {
       // ---- PÓS-SNAPSHOT: guarda pra próxima checagem de rótulo, e pausa se CAPTCHA/2FA ----
       if (toolParaEnviar === "snapshot" && toolResult?.ok) {
         lastSnap = toolResult.out;
-        if (typeof pareceCaptcha === "function" && pareceCaptcha(lastSnap) && typeof askUser === "function") {
-          const chave = "_offlineCaptcha_" + (lastSnap.url || "");
-          if (!sessionStorage.getItem(chave)) {
-            sessionStorage.setItem(chave, "1");
-            await askUser('Apareceu um CAPTCHA ou desafio de verificação nesta página, e eu não resolvo esse tipo de coisa automaticamente. Resolva você e me avise aqui quando terminar — ou diga "pule" para eu tentar outro caminho.');
-            if (typeof agentRun !== "undefined" && agentRun?.cancel) return { ok: false, error: "parado pelo usuário", steps: step };
-          }
+        if (typeof pareceCaptcha === "function" && pareceCaptcha(lastSnap) && typeof askUser === "function" && !captchaPausado.has(lastSnap.url)) {
+          captchaPausado.add(lastSnap.url);
+          await askUser('Apareceu um CAPTCHA ou desafio de verificação nesta página, e eu não resolvo esse tipo de coisa automaticamente. Resolva você e me avise aqui quando terminar — ou diga "pule" para eu tentar outro caminho.');
+          if (typeof agentRun !== "undefined" && agentRun?.cancel) return { ok: false, error: "parado pelo usuário", steps: step };
         } else if (typeof DETECT_2FA !== "undefined" && typeof showLoginModal === "function") {
           const texto2fa = `${lastSnap.url || ""} ${lastSnap.title || ""} ${(lastSnap.trecho || "").slice(0, 500)}`;
           const chave = "_offline2faAttempted";
