@@ -11,6 +11,11 @@
   <button id="btnSettings" title="Configurações">⚙</button>
 </header>
 
+<!-- Fica FORA de #settings de propósito: o download do modelo local (só na 1ª vez, pode
+     levar minutos) continua depois que o usuário fecha as Configurações, e sem isto a
+     barra sumia junto com o painel — sem nenhum aviso de que ainda estava baixando. -->
+<div id="offlineProgress" style="display: none; margin: 6px 12px; font-size: 12px; color: #666;"></div>
+
 <div id="pauseLogin" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999;">
   <div style="background: white; border-radius: 8px; padding: 24px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
     <h2 style="margin: 0 0 16px 0; color: #333;">🔐 Login Necessário</h2>
@@ -23,7 +28,6 @@
   <label>Modo Offline — agente local via WebLLM, sem gateway nem servidor externo (requer WebGPU; baixa ~4-5GB na 1ª vez, depois fica em cache)
     <input id="cfgOffline" type="checkbox"> Ativar
   </label>
-  <div id="offlineProgress" style="display: none; margin: 4px 0; font-size: 12px; color: #666;"></div>
   <div id="grpGateway">
     <label>URL do Gateway
       <input id="cfgUrl" placeholder="http://localhost:8080/v1/chat/completions">

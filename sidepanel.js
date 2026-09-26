@@ -86,15 +86,22 @@ function updateOfflineUI() {
 // variável "offlineMode" de offline.js, que só vira true dentro de toggleOfflineMode(), e
 // essa função só era chamada a partir do clique em "Salvar" — então o provedor nativo
 // nunca ficava pronto sozinho numa instalação nova, mesmo com o padrão certo.
+//
+// ativandoOffline guarda a Promise em andamento (só na 1ª vez: baixar ~4-5GB do modelo
+// pode levar minutos). Sem isto, send() via cfg.offlineMode=true mas a variável real
+// "offlineMode" (só vira true quando o download/init termina) ainda em false — o agente
+// caía silenciosamente pro gateway (com a chave que o usuário estava tentando evitar)
+// bem no meio da ativação, sem nenhum aviso do motivo.
+let ativandoOffline = null;
 function ativarModoOfflineSeAtivo() {
-  if (!cfg.offlineMode || typeof toggleOfflineMode === "undefined") return;
+  if (!cfg.offlineMode || typeof toggleOfflineMode === "undefined") return null;
   const progressEl = $("offlineProgress");
   const onProgress = (report) => {
     progressEl.style.display = "block";
     const pct = Math.round((report.progress || 0) * 100);
     progressEl.textContent = `⏳ ${report.text || "Preparando modelo local..."} (${pct}%)`;
   };
-  toggleOfflineMode(true, onProgress).then(() => {
+  ativandoOffline = toggleOfflineMode(true, onProgress).then(() => {
     progressEl.style.display = "none";
   }).catch((e) => {
     progressEl.style.display = "none";
@@ -102,7 +109,8 @@ function ativarModoOfflineSeAtivo() {
     cfg.offlineMode = false;
     $("cfgOffline").checked = false;
     updateOfflineUI();
-  });
+  }).finally(() => { ativandoOffline = null; });
+  return ativandoOffline;
 }
 
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
@@ -1807,6 +1815,14 @@ async function send() {
 
   const social = respostaSocial(question);
   if (social) { addMsg("assistant", social); agentHistory.push({ task: question, resposta: social }); return; }
+
+  // Modo offline ainda inicializando (baixando o modelo, só na 1ª vez)? Espera terminar
+  // antes de decidir o caminho — sem isto, a tarefa caía silenciosamente pro gateway
+  // (com uma chave que pode nem estar configurada) bem no meio da ativação.
+  if (cfg.offlineMode && ativandoOffline) {
+    addMsg("assistant", "⏳ Preparando o modelo local (só na primeira vez, pode levar alguns minutos)... a tarefa começa assim que terminar.");
+    await ativandoOffline;
+  }
 
   await runAgent(question);
 }
