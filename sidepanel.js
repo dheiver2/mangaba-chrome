@@ -65,7 +65,7 @@ const DEFAULTS = {
   temperature: 0,   // 0 = determinístico, 1 = criativo
   maxTokens: 700,   // resposta máxima
   systemPrompt: "", // customizável
-  offlineMode: false,
+  offlineMode: true, // provedor nativo (WebLLM, sem chave/gateway) é o padrão — funciona de imediato, sem configurar nada
   dados: "",
   mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
 };
@@ -78,6 +78,31 @@ function updateOfflineUI() {
   for (const id of ["grpGateway", "grpMcp", "grpAgente", "grpSystemPrompt", "lblTimeout"]) {
     $(id).style.display = off ? "none" : "";
   }
+}
+
+// Liga o motor WebLLM quando cfg.offlineMode está true — chamado tanto no carregamento
+// da página quanto ao salvar as configurações. Sem isto, marcar "offlineMode: true" só
+// no objeto DEFAULTS não bastava: a flag que o loop do agente realmente checa é a
+// variável "offlineMode" de offline.js, que só vira true dentro de toggleOfflineMode(), e
+// essa função só era chamada a partir do clique em "Salvar" — então o provedor nativo
+// nunca ficava pronto sozinho numa instalação nova, mesmo com o padrão certo.
+function ativarModoOfflineSeAtivo() {
+  if (!cfg.offlineMode || typeof toggleOfflineMode === "undefined") return;
+  const progressEl = $("offlineProgress");
+  const onProgress = (report) => {
+    progressEl.style.display = "block";
+    const pct = Math.round((report.progress || 0) * 100);
+    progressEl.textContent = `⏳ ${report.text || "Preparando modelo local..."} (${pct}%)`;
+  };
+  toggleOfflineMode(true, onProgress).then(() => {
+    progressEl.style.display = "none";
+  }).catch((e) => {
+    progressEl.style.display = "none";
+    addMsg("assistant", "❌ Modo offline indisponível: " + e.message + " Configure um gateway em ⚙️ Configurações pra continuar usando a extensão.");
+    cfg.offlineMode = false;
+    $("cfgOffline").checked = false;
+    updateOfflineUI();
+  });
 }
 
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
@@ -99,6 +124,7 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
     OFFLINE_CONFIG.max_tokens = cfg.maxTokens;
     OFFLINE_CONFIG.max_steps = cfg.maxSteps;
   }
+  ativarModoOfflineSeAtivo();
 });
 $("cfgOffline").addEventListener("change", updateOfflineUI);
 
@@ -118,7 +144,7 @@ function subDados(texto) {
 
 // pré-carga assíncrona do modelo no gateway (HD USB 2.0 → RAM) para matar o cold-start
 function warmup() {
-  if (!cfg.model) return;
+  if (!cfg.model || cfg.offlineMode) return; // modo offline não usa gateway nenhum
   const base = cfg.url.replace(/\/v1\/chat\/completions\/?$/, "");
   fetch(`${base}/api/v1/${cfg.model}/load`, { method: "POST", headers: gatewayHeaders() }).catch(() => {});
 }
@@ -214,21 +240,7 @@ $("btnSave").onclick = () => {
 
   // Ativar/desativar modo offline (WebLLM) — onProgress mostra o download/preparo do modelo,
   // que só acontece de fato na primeira vez (fica em cache do navegador depois).
-  if (cfg.offlineMode) {
-    const progressEl = $("offlineProgress");
-    const onProgress = (report) => {
-      progressEl.style.display = "block";
-      const pct = Math.round((report.progress || 0) * 100);
-      progressEl.textContent = `⏳ ${report.text || "Preparando modelo local..."} (${pct}%)`;
-    };
-    toggleOfflineMode(true, onProgress).then(() => {
-      progressEl.style.display = "none";
-    }).catch(e => {
-      progressEl.style.display = "none";
-      addMsg("assistant").textContent = "❌ Modo offline indisponível: " + e.message;
-      cfg.offlineMode = false;
-    });
-  }
+  ativarModoOfflineSeAtivo();
 
   warmup();
 };
