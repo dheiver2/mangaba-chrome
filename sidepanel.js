@@ -92,6 +92,18 @@ function updateOfflineUI() {
 // "offlineMode" (só vira true quando o download/init termina) ainda em false — o agente
 // caía silenciosamente pro gateway (com a chave que o usuário estava tentando evitar)
 // bem no meio da ativação, sem nenhum aviso do motivo.
+// Traduz erros técnicos do download/cache do modelo em algo acionável — "Cache.add()
+// encountered a network error" (erro real e comum: a Cache Storage API do Chrome falha
+// assim quando o fetch dos pesos do modelo no Hugging Face não completa) não diz ao
+// usuário o que checar.
+function mensagemErroOffline(e) {
+  const msg = String(e?.message || e || "");
+  if (/Cache\.add\(\)|network error/i.test(msg)) {
+    return "falha de rede baixando os arquivos do modelo (Hugging Face). Confira sua conexão com a internet — se estiver usando VPN, bloqueador de anúncios/rastreadores ou firewall, eles podem estar impedindo o acesso a huggingface.co. Depois de resolver, volte em ⚙️ Configurações e clique em Salvar de novo para tentar o download outra vez.";
+  }
+  return msg;
+}
+
 let ativandoOffline = null;
 function ativarModoOfflineSeAtivo() {
   if (!cfg.offlineMode || typeof toggleOfflineMode === "undefined") return null;
@@ -105,7 +117,7 @@ function ativarModoOfflineSeAtivo() {
     progressEl.style.display = "none";
   }).catch((e) => {
     progressEl.style.display = "none";
-    addMsg("assistant", "❌ Modo offline indisponível: " + e.message + " Configure um gateway em ⚙️ Configurações pra continuar usando a extensão.");
+    addMsg("assistant", "❌ Modo offline indisponível: " + mensagemErroOffline(e) + " Ou configure um gateway em ⚙️ Configurações pra continuar usando a extensão enquanto isso.");
     cfg.offlineMode = false;
     $("cfgOffline").checked = false;
     updateOfflineUI();
