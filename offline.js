@@ -214,8 +214,16 @@ async function runOfflineAgent(task, tools_available, onProgress) {
 
     let resp;
     try {
+      // messages: [...messages] (cópia rasa) de propósito — o WebLLM, ao usar Hermes-2-Pro/3
+      // com "tools", MUTA o array de mensagens que recebe (request.messages.unshift(...) pra
+      // injetar o system prompt de function-calling dele). Se passássemos o array direto, essa
+      // injeção ficava PERMANENTE no nosso "messages" (reaproveitado em todos os passos) — no
+      // passo seguinte, a própria validação da lib encontrava esse "role:system" que ELA MESMA
+      // tinha injetado e lançava "cannot specify customized system prompt". Com a cópia, a
+      // mutação só afeta o array descartável desta chamada; o nosso "messages" nunca ganha
+      // role:"system" nenhum.
       resp = await engine.chat.completions.create({
-        messages,
+        messages: [...messages],
         tools,
         max_tokens: OFFLINE_CONFIG.max_tokens,
         temperature: OFFLINE_CONFIG.temperature
