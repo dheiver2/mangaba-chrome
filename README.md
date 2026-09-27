@@ -1,6 +1,6 @@
 # Mangaba AI — Chrome Extension 🥭
 
-📄 **Page / download:** https://dheiver2.github.io/mangaba-chrome/ (via GitHub Pages, `docs/` folder)
+> Repositório privado — a página pública via GitHub Pages foi desativada automaticamente quando o repo deixou de ser público. Instale via **Load unpacked** em `chrome://extensions` (veja abaixo) ou baixe o `.zip` de uma [release](../../releases).
 
 Autonomous browser agent in Chrome's side panel, connected to the **Mangaba Gateway** (local GGUF models) or fully offline via **WebLLM** (WebGPU, in-browser). 100% original code, Manifest V3, zero dependencies.
 
