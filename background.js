@@ -545,11 +545,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Detectar paginação: retorna {tipo, total, atual, proximo_elemento}
 const detectarPaginacaoFn = () => {
+  // :contains() é seletor do jQuery, não existe no querySelectorAll nativo — lançaria
+  // SyntaxError se esta função rodasse (hoje é código morto: nenhuma ferramenta chamada
+  // "detectar_paginacao" está em TOOL_NAMES, então o modelo nunca consegue chamá-la).
+  // Filtra por texto em JS em vez de tentar :contains() na engine do CSS.
+  const porTexto = (sel, termos) => [...document.querySelectorAll(sel)].filter((el) => {
+    const t = (el.innerText || el.textContent || "").trim();
+    return termos.some((termo) => t.includes(termo));
+  });
   const sigs = {
     proximo: [
-      ...document.querySelectorAll('a[rel="next"], a[aria-label*="next"], a[aria-label*="Próxima"], button:contains("Próxima"), a:contains(">"), a:contains("→")')
+      ...document.querySelectorAll('a[rel="next"], a[aria-label*="next"], a[aria-label*="Próxima"]'),
+      ...porTexto("button, a", ["Próxima", ">", "→"])
     ],
-    carregar_mais: [...document.querySelectorAll('button:contains("Carregar"), a:contains("Carregar mais"), [class*="load-more"]')],
+    carregar_mais: [...porTexto("button, a", ["Carregar", "Carregar mais"]), ...document.querySelectorAll('[class*="load-more"]')],
     pagina_numerada: [...document.querySelectorAll('a[href*="page"], a[href*="p="]')],
     indicador: document.querySelector('[aria-label*="of"], [aria-label*="de"], .pagination')
   };
