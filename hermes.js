@@ -48,6 +48,13 @@ async function* lerSSEHermes(corpo) {
   }
 }
 
+// Diz ao agente qual página o usuário está vendo, para ele trabalhar nela e não noutra.
+async function contextoDaAba() {
+  const r = await chrome.runtime.sendMessage({ type: "GET_PAGE_CONTEXT", windowId: myWindowId }).catch(() => null);
+  if (!r?.ok) return "";
+  return `\n\n[aba atual: ${r.page.title} — ${r.page.url}]\nTrabalhe nesta aba, a que o usuário está vendo, a não ser que ele peça outra.`;
+}
+
 // Executa uma tarefa pelo Hermes. Retorna quando o stream termina.
 async function runHermes(task) {
   agentRun = { cancel: false, waiting: null, abort: new AbortController() };
@@ -72,7 +79,7 @@ async function runHermes(task) {
     const fluxo = await fetch(hermesBase() + "/v1/chat/completions", {
       method: "POST",
       headers: { ...cabecalhos, "X-Mangaba-Key": cfg.key || "" },
-      body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task }], stream: true }),
+      body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task + (await contextoDaAba()) }], stream: true }),
       signal: agentRun.abort.signal,
     });
     if (!fluxo.ok) throw new Error(`Hermes respondeu ${fluxo.status}`);

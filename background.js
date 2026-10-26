@@ -401,6 +401,13 @@ async function waitLoad(tabId, ms = 10000) {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  // contexto da aba que o usuário está vendo, para o agente trabalhar nela
+  if (msg.type === "GET_PAGE_CONTEXT") {
+    getTab(msg.windowId)
+      .then((tab) => sendResponse({ ok: true, page: { title: tab.title || "", url: tab.url || "" } }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg.type !== "AGENT_TOOL") return;
   (async () => {
     try {
