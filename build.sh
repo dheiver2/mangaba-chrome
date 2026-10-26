@@ -49,7 +49,7 @@ fi
 if command -v terser &> /dev/null; then
   echo "🔐 Ofuscando JavaScript..."
 
-  for js_file in sidepanel.js background.js mcp.js db.js offline.js; do
+  for js_file in sidepanel.js background.js mcp.js db.js offline.js sync.js; do
     if [ -f "$js_file" ]; then
       terser "$js_file" \
         --compress passes=3,pure_funcs=console.log \
