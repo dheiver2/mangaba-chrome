@@ -19,13 +19,6 @@ cp manifest.json "$DIST_DIR/"
 cp *.html "$DIST_DIR/"
 cp *.css "$DIST_DIR/" 2>/dev/null || true
 
-# lib/ (WebLLM vendorizado): copia sem passar pelo terser — é um bundle de terceiros
-# já otimizado; minificar de novo arrisca quebrar algo sutil sem ganho real de tamanho.
-if [ -d lib ]; then
-  cp -r lib "$DIST_DIR/"
-  echo "📦 lib/ (WebLLM) copiada sem reminificar"
-fi
-
 echo "📦 Arquivo estáticos copiados"
 
 # Minificar HTML
@@ -49,7 +42,7 @@ fi
 if command -v terser &> /dev/null; then
   echo "🔐 Ofuscando JavaScript..."
 
-  for js_file in sidepanel.js background.js mcp.js db.js offline.js sync.js; do
+  for js_file in sidepanel.js background.js mcp.js db.js sync.js; do
     if [ -f "$js_file" ]; then
       terser "$js_file" \
         --compress passes=3,pure_funcs=console.log \

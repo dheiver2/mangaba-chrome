@@ -65,67 +65,12 @@ const DEFAULTS = {
   temperature: 0,   // 0 = determinístico, 1 = criativo
   maxTokens: 700,   // resposta máxima
   systemPrompt: "", // customizável
-  offlineMode: false, // Mangaba Router é o padrão; o modo offline (WebLLM, ~4-5GB) fica opcional nas Configurações
   dados: "",
   mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
 };
 // Nomes de modelo que já saíram do Mangaba Router: quem salvou um deles é migrado para o padrão.
 const MODELOS_APOSENTADOS = ["Mangaba-Qwen3-Coder-30B-A3B", "mangaba-pro", "mangaba-max", "mangaba-lite-q4", "mangaba-vision-q8"];
 let cfg = { ...DEFAULTS };
-
-// Modo offline (WebLLM) não usa gateway, MCP nem os agentes especialistas — mostrar esses
-// campos só confunde quando ativado. Roda no load e a cada toggle do checkbox.
-function updateOfflineUI() {
-  const off = $("cfgOffline").checked;
-  for (const id of ["grpGateway", "grpMcp", "grpAgente", "grpSystemPrompt", "lblTimeout"]) {
-    $(id).style.display = off ? "none" : "";
-  }
-}
-
-// Liga o motor WebLLM quando cfg.offlineMode está true — chamado tanto no carregamento
-// da página quanto ao salvar as configurações. Sem isto, marcar "offlineMode: true" só
-// no objeto DEFAULTS não bastava: a flag que o loop do agente realmente checa é a
-// variável "offlineMode" de offline.js, que só vira true dentro de toggleOfflineMode(), e
-// essa função só era chamada a partir do clique em "Salvar" — então o provedor nativo
-// nunca ficava pronto sozinho numa instalação nova, mesmo com o padrão certo.
-//
-// ativandoOffline guarda a Promise em andamento (só na 1ª vez: baixar ~4-5GB do modelo
-// pode levar minutos). Sem isto, send() via cfg.offlineMode=true mas a variável real
-// "offlineMode" (só vira true quando o download/init termina) ainda em false — o agente
-// caía silenciosamente pro gateway (com a chave que o usuário estava tentando evitar)
-// bem no meio da ativação, sem nenhum aviso do motivo.
-// Traduz erros técnicos do download/cache do modelo em algo acionável — "Cache.add()
-// encountered a network error" (erro real e comum: a Cache Storage API do Chrome falha
-// assim quando o fetch dos pesos do modelo no Hugging Face não completa) não diz ao
-// usuário o que checar.
-function mensagemErroOffline(e) {
-  const msg = String(e?.message || e || "");
-  if (/Cache\.add\(\)|network error/i.test(msg)) {
-    return "falha de rede baixando os arquivos do modelo (Hugging Face). Confira sua conexão com a internet — se estiver usando VPN, bloqueador de anúncios/rastreadores ou firewall, eles podem estar impedindo o acesso a huggingface.co. Depois de resolver, volte em ⚙️ Configurações e clique em Salvar de novo para tentar o download outra vez.";
-  }
-  return msg;
-}
-
-let ativandoOffline = null;
-function ativarModoOfflineSeAtivo() {
-  if (!cfg.offlineMode || typeof toggleOfflineMode === "undefined") return null;
-  const progressEl = $("offlineProgress");
-  const onProgress = (report) => {
-    progressEl.style.display = "block";
-    const pct = Math.round((report.progress || 0) * 100);
-    progressEl.textContent = `⏳ ${report.text || "Preparando modelo local..."} (${pct}%)`;
-  };
-  ativandoOffline = toggleOfflineMode(true, onProgress).then(() => {
-    progressEl.style.display = "none";
-  }).catch((e) => {
-    progressEl.style.display = "none";
-    addMsg("assistant", "❌ Modo offline indisponível: " + mensagemErroOffline(e) + " Ou configure um gateway em ⚙️ Configurações pra continuar usando a extensão enquanto isso.");
-    cfg.offlineMode = false;
-    $("cfgOffline").checked = false;
-    updateOfflineUI();
-  }).finally(() => { ativandoOffline = null; });
-  return ativandoOffline;
-}
 
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   if (MODELOS_APOSENTADOS.includes(saved.model)) {
@@ -138,21 +83,12 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   $("cfgKey").value = cfg.key;
   $("cfgSteps").value = cfg.maxSteps;
   $("cfgTimeout").value = cfg.maxTimeout || 300;
-  $("cfgOffline").checked = cfg.offlineMode || false;
   $("cfgTemperature").value = cfg.temperature ?? 0;
   $("cfgMaxTokens").value = cfg.maxTokens ?? 700;
   $("cfgSystemPrompt").value = cfg.systemPrompt || "";
   $("cfgDados").value = cfg.dados || "";
   $("cfgMcps").value = cfg.mcps ?? DEFAULTS.mcps;
-  updateOfflineUI();
-  if (typeof OFFLINE_CONFIG !== "undefined") {
-    OFFLINE_CONFIG.temperature = cfg.temperature;
-    OFFLINE_CONFIG.max_tokens = cfg.maxTokens;
-    OFFLINE_CONFIG.max_steps = cfg.maxSteps;
-  }
-  ativarModoOfflineSeAtivo();
 });
-$("cfgOffline").addEventListener("change", updateOfflineUI);
 
 // mapa dos dados pessoais (chave->valor) e substituição de {{chave}} feita SÓ na execução (fora do modelo)
 function dadosMap() {
@@ -170,7 +106,7 @@ function subDados(texto) {
 
 // pré-carga assíncrona do modelo no gateway (HD USB 2.0 → RAM) para matar o cold-start
 function warmup() {
-  if (!cfg.model || cfg.offlineMode) return; // modo offline não usa gateway nenhum
+  if (!cfg.model) return;
   const base = cfg.url.replace(/\/v1\/chat\/completions\/?$/, "");
   // O Mangaba Router não tem /api/v1/<modelo>/load (é rota do gateway antigo): não pré-carregar nele
   if (base === "https://mangabarouter.store") return;
@@ -249,27 +185,12 @@ $("btnSave").onclick = () => {
     temperature: Math.min(1, Math.max(0, parseFloat($("cfgTemperature").value) || 0)),
     maxTokens: Math.min(4000, Math.max(100, parseInt($("cfgMaxTokens").value) || 700)),
     systemPrompt: $("cfgSystemPrompt").value.trim(),
-    offlineMode: $("cfgOffline").checked,
     dados: $("cfgDados").value.trim(),
     mcps: $("cfgMcps").value.trim()
   };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
-  updateOfflineUI();
   if (account) syncPush(account).catch(() => {});
-
-  // Temperatura/max tokens/máx. passos são os únicos campos que continuam visíveis e
-  // editáveis no modo offline (o resto fica escondido por updateOfflineUI) — sem isto,
-  // eles ficavam visíveis mas não tinham efeito nenhum no WebLLM (valores fixos internos).
-  if (typeof OFFLINE_CONFIG !== "undefined") {
-    OFFLINE_CONFIG.temperature = cfg.temperature;
-    OFFLINE_CONFIG.max_tokens = cfg.maxTokens;
-    OFFLINE_CONFIG.max_steps = cfg.maxSteps;
-  }
-
-  // Ativar/desativar modo offline (WebLLM) — onProgress mostra o download/preparo do modelo,
-  // que só acontece de fato na primeira vez (fica em cache do navegador depois).
-  ativarModoOfflineSeAtivo();
 
   warmup();
 };
@@ -1165,42 +1086,6 @@ async function runAgent(task) {
   chat.appendChild(status);
   const box = stepsBox();
 
-  // Modo offline (WebLLM): motor local completamente diferente do fluxo normal a seguir
-  // (sem gateway, sem plano/pickAgent, tool-calling nativo do modelo local) — desvia aqui
-  // antes de qualquer chamada ao gateway. Sem este desvio, "offlineMode" nunca era lido em
-  // lugar nenhum do fluxo principal: o modo offline "ligava" (baixava o modelo) mas todo
-  // agente continuava indo pro gateway normal, silenciosamente.
-  if (typeof offlineMode !== "undefined" && offlineMode) {
-    let statusTxtOff = "Processando localmente (WebLLM)";
-    const tickOff = setInterval(() => { if (statusTxtOff) status.textContent = `${statusTxtOff} · ${secs()}s`; }, 1000);
-    box.add("Rodando localmente via WebLLM (sem gateway)");
-    try {
-      const r = await runOfflineAgent(task, null, (report) => {
-        const pct = Math.round((report?.progress || 0) * 100);
-        statusTxtOff = report?.text ? `${report.text} (${pct}%)` : "Processando localmente (WebLLM)";
-      });
-      statusTxtOff = null;
-      status.textContent = `Concluído (local) · ${r.steps} passo(s) · ${secs()}s`;
-      box.det.open = false;
-      if (r.ok) {
-        addMsg("assistant", r.result);
-        agentHistory.push({ task, resposta: r.result });
-      } else {
-        addMsg("err", "Modo offline: " + r.error);
-      }
-    } catch (e) {
-      statusTxtOff = null;
-      status.textContent = `Erro (local) · ${secs()}s`;
-      addMsg("err", "Modo offline: " + e.message);
-    } finally {
-      clearInterval(tickOff);
-      agentRun = null;
-      setStop(false);
-      input.placeholder = "Pergunte algo...";
-    }
-    return;
-  }
-
   let statusTxt = "Planejando";
   const tick = setInterval(() => {
     if (statusTxt) status.textContent = `${statusTxt} · ${secs()}s`;
@@ -1836,14 +1721,6 @@ async function send() {
 
   const social = respostaSocial(question);
   if (social) { addMsg("assistant", social); agentHistory.push({ task: question, resposta: social }); return; }
-
-  // Modo offline ainda inicializando (baixando o modelo, só na 1ª vez)? Espera terminar
-  // antes de decidir o caminho — sem isto, a tarefa caía silenciosamente pro gateway
-  // (com uma chave que pode nem estar configurada) bem no meio da ativação.
-  if (cfg.offlineMode && ativandoOffline) {
-    addMsg("assistant", "⏳ Preparando o modelo local (só na primeira vez, pode levar alguns minutos)... a tarefa começa assim que terminar.");
-    await ativandoOffline;
-  }
 
   await runAgent(question);
 }
