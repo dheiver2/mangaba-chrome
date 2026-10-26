@@ -243,6 +243,18 @@ const clickFn = (i) => {
   el.click();
   return "cliquei em [" + i + "]";
 };
+// Editores ricos (Google Docs etc.) escrevem num iframe contenteditable que o snapshot
+// não enxerga. Roda em TODOS os frames: o que tiver o corpo editável recebe o texto.
+const escreverFn = (texto) => {
+  const corpo = document.body;
+  if (!corpo || !corpo.isContentEditable) return { ok: false };
+  corpo.focus();
+  // execCommand insere como digitação real, e o editor reage aos eventos de input
+  const inseriu = document.execCommand("insertText", false, texto);
+  if (!inseriu) corpo.textContent = texto;
+  return { ok: true, frame: location.hostname };
+};
+
 const typeFn = (i, texto) => {
   const el = (window.__mgbEls || [])[i];
   if (!el) return "elemento [" + i + "] não encontrado";
@@ -475,6 +487,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           out = await exec(tab.id, clickFn, [args.i]);
           await sleep(800); await waitLoad(tab.id, 6000);
         } else if (tool === "digitar") out = await exec(tab.id, typeFn, [args.i, String(args.texto ?? "")]);
+        else if (tool === "escrever") {
+          const frames = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: escreverFn, args: [String(args.texto ?? "")] });
+          const feito = frames.map((f) => f.result).find((r) => r && r.ok);
+          if (!feito) throw new Error("não achei a área de edição; clique no documento e tente de novo");
+          out = "escrevi o texto no documento";
+        }
         else if (tool === "tecla") {
           out = await exec(tab.id, keyFn, [args.i, args.tecla || "Enter"]);
           await sleep(800); await waitLoad(tab.id, 6000);
