@@ -232,3 +232,24 @@ async function cleanupOldMemories() {
     };
   };
 }
+
+// Leitura e escrita em lote de registros brutos (usadas pela sincronização com a conta)
+async function listStore(name) {
+  await initDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction([name], "readonly").objectStore(name).getAll();
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => resolve(req.result || []);
+  });
+}
+
+async function putRecords(name, records) {
+  await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([name], "readwrite");
+    const store = tx.objectStore(name);
+    for (const r of records) store.put(r);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}

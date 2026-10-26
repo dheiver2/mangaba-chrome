@@ -25,6 +25,27 @@
 </div>
 
 <div id="settings" class="hidden">
+  <div id="grpConta" style="border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:10px">
+    <strong>Conta e sincronização</strong>
+    <div id="contaStatus" style="font-size:12px;color:#555;margin:4px 0">Não conectado — o histórico fica só neste navegador.</div>
+    <label>Servidor da conta
+      <input id="cfgApiUrl" placeholder="https://mangaba-chrome-backend.vercel.app">
+    </label>
+    <label>Nome (só para criar conta)
+      <input id="contaNome" placeholder="seu nome">
+    </label>
+    <label>E-mail
+      <input id="contaEmail" type="email" placeholder="voce@exemplo.com">
+    </label>
+    <label>Senha (mínimo 8 caracteres)
+      <input id="contaSenha" type="password">
+    </label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button id="btnEntrar" type="button">Entrar</button>
+      <button id="btnCriarConta" type="button">Criar conta</button>
+      <button id="btnSair" type="button">Sair</button>
+    </div>
+  </div>
   <label>Modo Offline — agente local via WebLLM, sem gateway nem servidor externo (requer WebGPU; baixa ~4-5GB na 1ª vez, depois fica em cache)
     <input id="cfgOffline" type="checkbox"> Ativar
   </label>
@@ -114,6 +135,7 @@
 </footer>
 
 <script src="db.js"></script>
+<script src="sync.js"></script>
 <script src="offline.js"></script>
 <script src="mcp.js"></script>
 <script src="sidepanel.js"></script>

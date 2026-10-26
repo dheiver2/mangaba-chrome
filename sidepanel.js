@@ -58,17 +58,19 @@ const getCachedResponse = (model, messages) => {
 
 const DEFAULTS = {
   url: "https://mangabarouter.store/v1/chat/completions",
-  model: "Mangaba-Qwen3-Coder-30B-A3B",
+  model: "mangaba-titan", // Mangaba Router: mais capaz (agentes, código, visão)
   key: "",
   maxSteps: 20,
   maxTimeout: 300,  // 5 min padrão
   temperature: 0,   // 0 = determinístico, 1 = criativo
   maxTokens: 700,   // resposta máxima
   systemPrompt: "", // customizável
-  offlineMode: true, // provedor nativo (WebLLM, sem chave/gateway) é o padrão — funciona de imediato, sem configurar nada
+  offlineMode: false, // Mangaba Router é o padrão; o modo offline (WebLLM, ~4-5GB) fica opcional nas Configurações
   dados: "",
   mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
 };
+// Nomes de modelo que já saíram do Mangaba Router: quem salvou um deles é migrado para o padrão.
+const MODELOS_APOSENTADOS = ["Mangaba-Qwen3-Coder-30B-A3B", "mangaba-pro", "mangaba-max", "mangaba-lite-q4", "mangaba-vision-q8"];
 let cfg = { ...DEFAULTS };
 
 // Modo offline (WebLLM) não usa gateway, MCP nem os agentes especialistas — mostrar esses
@@ -126,6 +128,10 @@ function ativarModoOfflineSeAtivo() {
 }
 
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
+  if (MODELOS_APOSENTADOS.includes(saved.model)) {
+    saved.model = DEFAULTS.model;
+    chrome.storage.sync.set({ model: DEFAULTS.model });
+  }
   cfg = saved;
   $("cfgUrl").value = cfg.url;
   $("cfgModel").value = cfg.model;
@@ -166,6 +172,8 @@ function subDados(texto) {
 function warmup() {
   if (!cfg.model || cfg.offlineMode) return; // modo offline não usa gateway nenhum
   const base = cfg.url.replace(/\/v1\/chat\/completions\/?$/, "");
+  // O Mangaba Router não tem /api/v1/<modelo>/load (é rota do gateway antigo): não pré-carregar nele
+  if (base === "https://mangabarouter.store") return;
   fetch(`${base}/api/v1/${cfg.model}/load`, { method: "POST", headers: gatewayHeaders() }).catch(() => {});
 }
 setTimeout(warmup, 400); // após carregar cfg do storage
@@ -248,6 +256,7 @@ $("btnSave").onclick = () => {
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
   updateOfflineUI();
+  if (account) syncPush(account).catch(() => {});
 
   // Temperatura/max tokens/máx. passos são os únicos campos que continuam visíveis e
   // editáveis no modo offline (o resto fica escondido por updateOfflineUI) — sem isto,
@@ -350,7 +359,7 @@ function setAssistant(div, text) {
 }
 
 function gatewayHeaders() {
-  const headers = { "Content-Type": "application/json", "ngrok-skip-browser-warning": "1" };
+  const headers = { "Content-Type": "application/json" };
   if (cfg.key) headers.Authorization = "Bearer " + cfg.key;
   return headers;
 }
@@ -801,7 +810,7 @@ async function tool(t, args) {
 const TOOL_NAMES = ["navegar", "nova_aba", "voltar", "avancar", "recarregar", "fechar_aba", "clicar", "clicar_texto", "digitar", "limpar", "tecla", "hover", "rolar", "rolar_ate", "rolar_fim", "ler", "ler_varias", "links", "extrair", "esperar", "esperar_por", "olhar", "listar_abas", "trocar_aba", "formulario", "preencher", "selecionar", "marcar", "curtir", "agora", "mcp", "lembrar", "perguntar", "concluir"];
 const STR_ARG = { concluir: "resposta", perguntar: "pergunta", navegar: "url", nova_aba: "url", rolar: "dir", rolar_ate: "texto", clicar_texto: "texto", esperar_por: "texto", extrair: "o_que" };
 
-const VISION_MODEL = "mangaba-vision-q8";
+const VISION_MODEL = "mangaba-vl";
 
 // captura de tela → descrição pelo modelo de visão do gateway (com cache por imagem)
 const visionCache = new Map(); // hash da imagem → descrição
@@ -1722,7 +1731,7 @@ async function runAgent(task) {
         if (invalidos >= 4) {
           statusTxt = null;
           status.textContent = `Modelo não retornou ações válidas · ${secs()}s`;
-          addMsg("err", `O modelo respondeu fora do formato JSON ${invalidos}× seguidas (última: "${clean.slice(0, 120) || "vazia"}"). Tente um modelo maior nas Configurações (ex.: mangaba-pro ou mangaba-max) — os menores erram a sintaxe do JSON.`);
+          addMsg("err", `O modelo respondeu fora do formato JSON ${invalidos}× seguidas (última: "${clean.slice(0, 120) || "vazia"}"). Tente um modelo maior nas Configurações (ex.: mangaba-titan) — os menores erram a sintaxe do JSON.`);
           return;
         }
         continue;
@@ -1738,7 +1747,7 @@ async function runAgent(task) {
         if (avisosLoop >= 2) {
           statusTxt = null;
           status.textContent = `Preso em repetição · ${box.n} passos · ${secs()}s`;
-          addMsg("err", "O agente ficou repetindo a mesma ação sem progredir. Tente um modelo maior nas Configurações (mangaba-pro/max) ou reformule o pedido.");
+          addMsg("err", "O agente ficou repetindo a mesma ação sem progredir. Tente um modelo maior nas Configurações (mangaba-titan) ou reformule o pedido.");
           return;
         }
         feitas.push("ATENÇÃO: você repetiu a mesma ação sem progresso; MUDE de estratégia AGORA ou use \"concluir\".");
@@ -1849,3 +1858,42 @@ input.addEventListener("keydown", (e) => {
 // textarea cresce com o conteúdo (até o teto do CSS)
 function autoGrow() { input.style.height = "auto"; input.style.height = Math.min(120, input.scrollHeight) + "px"; }
 input.addEventListener("input", autoGrow);
+
+// ---- Conta: entrar, criar conta, sair e sincronização ----
+let account = null;
+const statusConta = (msg) => { $("contaStatus").textContent = msg; };
+const mostraConta = () => {
+  statusConta(account
+    ? "Conectado como " + (account.user.name || account.user.email) + " — dados sincronizados com " + account.apiUrl
+    : "Não conectado — o histórico fica só neste navegador.");
+};
+async function contaEntrar(criar) {
+  const apiUrl = $("cfgApiUrl").value.trim() || ACCOUNT_DEFAULT_URL;
+  try {
+    statusConta(criar ? "Criando conta…" : "Entrando…");
+    account = criar
+      ? await accountSignUp(apiUrl, $("contaNome").value.trim(), $("contaEmail").value.trim(), $("contaSenha").value)
+      : await accountSignIn(apiUrl, $("contaEmail").value.trim(), $("contaSenha").value);
+    $("contaSenha").value = "";
+    await syncPull(account, { includeSettings: true });
+    await syncPush(account);
+    mostraConta();
+  } catch (e) {
+    statusConta("Erro: " + e.message);
+  }
+}
+$("btnEntrar").onclick = () => contaEntrar(false);
+$("btnCriarConta").onclick = () => contaEntrar(true);
+$("btnSair").onclick = async () => {
+  await accountSignOut();
+  account = null;
+  mostraConta();
+};
+// Histórico e memória sobem a cada minuto enquanto a conta estiver conectada.
+setInterval(() => { if (account) syncPush(account, { recordsOnly: true }).catch(() => {}); }, 60000);
+accountLoad().then((saved) => {
+  account = saved;
+  $("cfgApiUrl").value = account ? account.apiUrl : ACCOUNT_DEFAULT_URL;
+  mostraConta();
+  if (account) syncPull(account).catch(() => {});
+});
