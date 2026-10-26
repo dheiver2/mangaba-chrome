@@ -41,6 +41,15 @@
       <button id="btnSair" type="button">Sair</button>
     </div>
   </div>
+  <label>Motor do agente
+    <select id="cfgEngine">
+      <option value="router">Mangaba Router (agente no navegador)</option>
+      <option value="hermes">Hermes (cérebro no servidor, ações na aba)</option>
+    </select>
+  </label>
+  <label>Endereço do Hermes (só para o motor Hermes)
+    <input id="cfgHermesUrl" placeholder="https://hermes.mangaba.ia.br">
+  </label>
   <div id="grpGateway">
     <label>URL do Gateway
       <input id="cfgUrl" placeholder="http://localhost:8080/v1/chat/completions">
@@ -128,6 +137,7 @@
 
 <script src="db.js"></script>
 <script src="sync.js"></script>
+<script src="hermes.js"></script>
 <script src="mcp.js"></script>
 <script src="sidepanel.js"></script>
 </body>

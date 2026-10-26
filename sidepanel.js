@@ -59,6 +59,8 @@ const getCachedResponse = (model, messages) => {
 const DEFAULTS = {
   url: "https://mangabarouter.store/v1/chat/completions",
   model: "mangaba-titan", // Mangaba Router: mais capaz (agentes, código, visão)
+  engine: "router", // "router" (agente no navegador + Mangaba Router) ou "hermes" (cérebro no servidor Hermes)
+  hermesUrl: "https://hermes.mangaba.ia.br",
   key: "",
   maxSteps: 20,
   maxTimeout: 300,  // 5 min padrão
@@ -80,6 +82,8 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   cfg = saved;
   $("cfgUrl").value = cfg.url;
   $("cfgModel").value = cfg.model;
+  $("cfgEngine").value = cfg.engine || "router";
+  $("cfgHermesUrl").value = cfg.hermesUrl || DEFAULTS.hermesUrl;
   $("cfgKey").value = cfg.key;
   $("cfgSteps").value = cfg.maxSteps;
   $("cfgTimeout").value = cfg.maxTimeout || 300;
@@ -179,6 +183,8 @@ $("btnSave").onclick = () => {
   cfg = {
     url: $("cfgUrl").value.trim() || DEFAULTS.url,
     model: $("cfgModel").value.trim(),
+    engine: $("cfgEngine").value,
+    hermesUrl: $("cfgHermesUrl").value.trim() || DEFAULTS.hermesUrl,
     key: $("cfgKey").value.trim(),
     maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20)),
     maxTimeout: Math.min(600, Math.max(60, parseInt($("cfgTimeout").value) || 300)),
@@ -1722,7 +1728,8 @@ async function send() {
   const social = respostaSocial(question);
   if (social) { addMsg("assistant", social); agentHistory.push({ task: question, resposta: social }); return; }
 
-  await runAgent(question);
+  if (cfg.engine === "hermes") await runHermes(question);
+  else await runAgent(question);
 }
 
 btnSend.onclick = () => {
