@@ -58,12 +58,20 @@ async function runHermes(task) {
   chat.appendChild(status);
   const resposta = addMsg("assistant");
   let texto = "";
+  if (!cfg.key) {
+    status.textContent = "Sem chave";
+    addMsg("err", "Informe sua chave do Mangaba Router em ⚙️ Configurações.");
+    agentRun = null;
+    setStop(false);
+    return;
+  }
   try {
     const inst = await hermesInstalacao();
     const cabecalhos = { "Content-Type": "application/json", Authorization: "Bearer " + inst.chave };
+    // a chave do Mangaba Router é do usuário: vai em cada turno e a ponte só a usa enquanto ele dura
     const fluxo = await fetch(hermesBase() + "/v1/chat/completions", {
       method: "POST",
-      headers: cabecalhos,
+      headers: { ...cabecalhos, "X-Mangaba-Key": cfg.key || "" },
       body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task }], stream: true }),
       signal: agentRun.abort.signal,
     });

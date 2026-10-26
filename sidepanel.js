@@ -79,8 +79,6 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
     chrome.storage.sync.set({ model: DEFAULTS.model });
   }
   cfg = saved;
-  $("cfgUrl").value = cfg.url;
-  $("cfgModel").value = cfg.model;
   $("cfgKey").value = cfg.key;
   $("cfgSteps").value = cfg.maxSteps;
   $("cfgTimeout").value = cfg.maxTimeout || 300;
@@ -178,8 +176,8 @@ document.addEventListener("keydown", (e) => {
 });
 $("btnSave").onclick = () => {
   cfg = {
-    url: $("cfgUrl").value.trim() || DEFAULTS.url,
-    model: $("cfgModel").value.trim(),
+    url: DEFAULTS.url,
+    model: DEFAULTS.model,
     key: $("cfgKey").value.trim(),
     maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20)),
     maxTimeout: Math.min(600, Math.max(60, parseInt($("cfgTimeout").value) || 300)),
@@ -297,7 +295,6 @@ async function ensureModel(headers) {
   if (!first) throw new Error("configure o modelo nas Configurações (GET /v1/models não retornou nada)");
   cfg.model = first;
   if (chrome.storage?.sync) chrome.storage.sync.set({ model: first });
-  $("cfgModel").value = first;
 }
 
 // separa erro temporário (túnel/gateway ocupado, HTML, 5xx, 404, rede) de erro fatal (config/4xx real)
@@ -1746,7 +1743,7 @@ const mostraConta = () => {
     : "Não conectado — o histórico fica só neste navegador.");
 };
 async function contaEntrar(criar) {
-  const apiUrl = $("cfgApiUrl").value.trim() || ACCOUNT_DEFAULT_URL;
+  const apiUrl = ACCOUNT_DEFAULT_URL;
   try {
     statusConta(criar ? "Criando conta…" : "Entrando…");
     account = criar
@@ -1771,7 +1768,6 @@ $("btnSair").onclick = async () => {
 setInterval(() => { if (account) syncPush(account, { recordsOnly: true }).catch(() => {}); }, 60000);
 accountLoad().then((saved) => {
   account = saved;
-  $("cfgApiUrl").value = account ? account.apiUrl : ACCOUNT_DEFAULT_URL;
   mostraConta();
   if (account) syncPull(account).catch(() => {});
 });

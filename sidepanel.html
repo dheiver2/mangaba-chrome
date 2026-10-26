@@ -23,9 +23,6 @@
   <div id="grpConta" style="border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:10px">
     <strong>Conta e sincronização</strong>
     <div id="contaStatus" style="font-size:12px;color:#555;margin:4px 0">Não conectado — o histórico fica só neste navegador.</div>
-    <label>Servidor da conta
-      <input id="cfgApiUrl" placeholder="https://mangaba-chrome-backend.vercel.app">
-    </label>
     <label>Nome (só para criar conta)
       <input id="contaNome" placeholder="seu nome">
     </label>
@@ -42,14 +39,8 @@
     </div>
   </div>
   <div id="grpGateway">
-    <label>URL do Gateway
-      <input id="cfgUrl" placeholder="http://localhost:8080/v1/chat/completions">
-    </label>
-    <label>Modelo
-      <input id="cfgModel" placeholder="ex.: qwen3-4b">
-    </label>
-    <label>API Key (opcional)
-      <input id="cfgKey" type="password">
+    <label>Sua chave do Mangaba Router
+      <input id="cfgKey" type="password" placeholder="mr-...">
     </label>
   </div>
   <label>Máx. passos do agente (3–50)
