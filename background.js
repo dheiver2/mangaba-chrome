@@ -248,11 +248,13 @@ const clickFn = (i) => {
 const escreverFn = (texto) => {
   const corpo = document.body;
   if (!corpo || !corpo.isContentEditable) return { ok: false };
+  const antes = corpo.innerText;
   corpo.focus();
-  // execCommand insere como digitação real, e o editor reage aos eventos de input
-  const inseriu = document.execCommand("insertText", false, texto);
-  if (!inseriu) corpo.textContent = texto;
-  return { ok: true, frame: location.hostname };
+  document.execCommand("insertText", false, texto);
+  // só vale se o texto apareceu de fato; sem isto o agente afirmava que escreveu sem escrever
+  const depois = corpo.innerText;
+  const trecho = texto.trim().slice(0, 25);
+  return { ok: depois !== antes && (!trecho || depois.includes(trecho)), frame: location.hostname };
 };
 
 const typeFn = (i, texto) => {
@@ -497,7 +499,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         else if (tool === "escrever") {
           const frames = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: escreverFn, args: [String(args.texto ?? "")] });
           const feito = frames.map((f) => f.result).find((r) => r && r.ok);
-          if (!feito) throw new Error("não achei a área de edição; clique no documento e tente de novo");
+          if (!feito) throw new Error("o editor não aceitou o texto (ou não achei a área de edição); clique dentro do documento e tente de novo. Não escrevi nada.");
           out = "escrevi o texto no documento";
         }
         else if (tool === "tecla") {
