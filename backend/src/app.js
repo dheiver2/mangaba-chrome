@@ -131,6 +131,18 @@ export function createHandler({ pool, jwtSecret }) {
 
     if (req.method === "POST" && path === "/auth/signup") return send(res, origin, 201, await signup(JSON.parse(await readBody(req) || "{}"), ip));
     if (req.method === "POST" && path === "/auth/login") return send(res, origin, 200, await login(JSON.parse(await readBody(req) || "{}"), ip));
+    if (req.method === "DELETE" && path === "/auth/me") {
+      // Exclusão definitiva: confirma com a senha e apaga a conta com todos os dados (cascade).
+      limitAuth(ip);
+      const u = userFromAuth(req);
+      const corpo = JSON.parse((await readBody(req)) || "{}");
+      const { rows } = await pool.query("select password_hash from users where id = $1", [u.id]);
+      if (!rows[0] || !(await bcrypt.compare(String(corpo.password || ""), rows[0].password_hash))) {
+        throw new HttpError(401, "senha incorreta");
+      }
+      await pool.query("delete from users where id = $1", [u.id]);
+      return send(res, origin, 200, { ok: true });
+    }
     if (req.method === "GET" && path === "/auth/me") {
       const u = userFromAuth(req);
       const { rows } = await pool.query("select id, email, name from users where id = $1", [u.id]);

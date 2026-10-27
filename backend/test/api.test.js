@@ -107,3 +107,18 @@ test("CORS libera a extensão e não libera origens quaisquer", async () => {
   const outra = await call("GET", "/health", { origin: "https://site-qualquer.com" });
   assert.equal(outra.headers.get("access-control-allow-origin"), null);
 });
+
+test("exclusão de conta: exige a senha e apaga a conta e os dados", async () => {
+  const email = unique();
+  const s = await call("POST", "/auth/signup", { body: { email, password: "senha-forte-123" } });
+  await call("PUT", "/sync/memory", { token: s.json.token, body: { payload: [{ key: "x", value: "y" }] } });
+  const semSenha = await call("DELETE", "/auth/me", { token: s.json.token, body: { password: "errada-000000" } });
+  assert.equal(semSenha.status, 401);
+  const ok = await call("DELETE", "/auth/me", { token: s.json.token, body: { password: "senha-forte-123" } });
+  assert.equal(ok.status, 200);
+  assert.equal((await call("POST", "/auth/login", { body: { email, password: "senha-forte-123" } })).status, 401);
+  assert.equal((await call("GET", "/auth/me", { token: s.json.token })).status, 401);
+  const { rows } = await pool.query("select count(*)::int as n from user_data ud join users u on u.id = ud.user_id where u.email = $1", [email]);
+  assert.equal(rows[0].n, 0);
+});
+

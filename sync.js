@@ -46,6 +46,12 @@ async function accountSignUp(apiUrl, name, email, password) {
   return account;
 }
 
+// Exclui a conta no servidor (confirmada pela senha) e tudo o que ela sincronizou.
+async function accountDelete(account, password) {
+  await accountRequest(account.apiUrl, "/auth/me", { method: "DELETE", body: { password }, token: account.token });
+  await accountSignOut();
+}
+
 async function accountSignOut() {
   await chrome.storage.local.remove(ACCOUNT_KEY);
 }

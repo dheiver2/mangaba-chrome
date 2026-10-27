@@ -1759,6 +1759,23 @@ async function contaEntrar(criar) {
 }
 $("btnEntrar").onclick = () => contaEntrar(false);
 $("btnCriarConta").onclick = () => contaEntrar(true);
+$("btnExcluirConta").onclick = async () => {
+  if (!account) return statusConta("Entre na conta antes de excluí-la.");
+  const senha = $("contaSenha").value;
+  if (!senha) return statusConta("Digite a senha no campo acima para confirmar a exclusão.");
+  if (!confirm("Excluir a conta e todos os dados sincronizados? Essa ação não pode ser desfeita.")) return;
+  try {
+    statusConta("Excluindo conta…");
+    await accountDelete(account, senha);
+    await hermesApagar();
+    $("contaSenha").value = "";
+    account = null;
+    mostraConta();
+    statusConta("Conta excluída. Os dados guardados neste navegador continuam aqui até você limpá-los.");
+  } catch (e) {
+    statusConta("Erro: " + e.message);
+  }
+};
 $("btnSair").onclick = async () => {
   await accountSignOut();
   account = null;

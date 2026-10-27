@@ -24,6 +24,18 @@ async function hermesInstalacao() {
   return inst;
 }
 
+// Apaga no Hermes a instalação desta extensão: container, volume e chave.
+async function hermesApagar() {
+  const r = await chrome.storage.local.get({ [HERMES_KEY]: null });
+  const inst = r[HERMES_KEY];
+  if (!inst) return;
+  await fetch(hermesBase() + "/instalacao/apagar", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + inst.chave },
+  }).catch(() => {});
+  await chrome.storage.local.remove(HERMES_KEY);
+}
+
 // Lê text/event-stream preservando o nome do evento (é nele que vêm as ações).
 async function* lerSSEHermes(corpo) {
   const leitor = corpo.getReader();
