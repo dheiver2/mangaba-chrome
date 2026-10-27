@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Mangaba AI",
   "version": "2.13.0",
-  "description": "Assistente brasileira no navegador: agente autônomo 100% local por padrão (sem chave nem servidor), com deadlock detection, login/2FA automático e snapshot inteligente.",
+  "description": "Assistente brasileiro no navegador: lê, preenche e clica na página que você está vendo, a seu pedido.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -14,8 +14,18 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
-  "permissions": ["sidePanel", "activeTab", "scripting", "storage", "tabs", "windows"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "windows"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
