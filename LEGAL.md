@@ -38,7 +38,10 @@ Você **NÃO pode**:
 - ✅ Chrome Web Store Terms of Service
 - ✅ LGPD (Lei Geral de Proteção de Dados)
 - ✅ GDPR (General Data Protection Regulation)
-- ✅ Sem coleta de dados pessoal sem consentimento
+- ✅ Dados pessoais tratados conforme a política de privacidade (`store/politica-de-privacidade.md`)
+- ✅ Conta opcional (e-mail, nome e senha em hash bcrypt); sincronização de histórico e memória só para quem tem conta
+- ✅ Conteúdo da página é enviado ao servidor do agente apenas em uma tarefa pedida pelo usuário
+- ✅ Exclusão de conta disponível no painel (`DELETE /auth/me`, com senha)
 
 ## Disclaimer
 
@@ -52,6 +55,6 @@ Ao usar esta extensão, você concorda com estes termos.
 
 ---
 
-**Versão:** 1.19.0  
-**Data:** 22 de setembro de 2026  
+**Versão:** 2.13.0  
+**Data:** 26 de outubro de 2026  
 **Autor:** Dheiver Santos
