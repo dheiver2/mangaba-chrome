@@ -76,6 +76,18 @@ try {
       assert.doesNotMatch(agora, /httpbin\.org\/html/);
       assert.ok(String(r.out).includes(agora), "voltar respondeu: " + JSON.stringify(r) + " | url: " + agora);
     }],
+    // Google Docs: precisa de um documento com "qualquer pessoa com o link pode editar"
+    ...(process.env.DOCS_TESTE_ID ? [["Google Docs: escreve no documento e lê o conteúdo de volta", async () => {
+      await ir(`https://docs.google.com/document/d/${process.env.DOCS_TESTE_ID}/edit`);
+      await espera(7000);
+      const snap = await c.acao("snapshot");
+      indice(snap, (x) => /área de edição do documento/.test(x.texto || ""));
+      const marca = "Mangaba teste " + Date.now();
+      const r = await c.acao("escrever", { texto: marca });
+      assert.ok(r.ok, r.error);
+      await espera(6000);
+      assert.match(String((await c.acao("ler")).out), new RegExp(marca));
+    }]] : []),
   ]);
 } finally {
   await c.fechar();

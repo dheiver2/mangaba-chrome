@@ -100,6 +100,8 @@ const snapshotFn = () => {
     }
   };
   walk(document);
+  const editorDocs = document.querySelector(".kix-appview-editor");
+  if (editorDocs && vis(editorDocs)) cands.unshift(editorDocs);
   // PRIORIZA o que está na viewport: após rolar até os comentários, o campo entra na lista dos 80 visíveis
   const VIEWPORT_LIMIT = 80;   // 45 → 80 elementos na viewport
   const OFFSCREEN_LIMIT = 80;  // +80 elementos fora da viewport
@@ -119,8 +121,10 @@ const snapshotFn = () => {
         i,
         tag: el.tagName.toLowerCase(),
         tipo: el.type || el.getAttribute("role") || "",
-        texto: (el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || "")
-          .trim().replace(/\s+/g, " ").slice(0, 70),
+        texto: el === editorDocs
+          ? "área de edição do documento (já com cursor: use escrever; para conferir, ler)"
+          : (el.innerText || el.value || el.placeholder || el.getAttribute("aria-label") || "")
+            .trim().replace(/\s+/g, " ").slice(0, 70),
         href: el.tagName === "A" && el.href ? String(el.href).slice(0, 70) : undefined,
         valor: el.value && el.type !== "password" ? String(el.value).slice(0, 40) : undefined,
         naTela: r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
@@ -517,6 +521,21 @@ async function teclaReal(tabId, tecla) {
   await cdp(tabId, "Input.dispatchKeyEvent", { type: "keyUp", ...base });
 }
 
+// Tecla com modificadores (ctrl=2, meta=4), ex.: ir ao fim do documento.
+async function teclaComModificador(tabId, tecla, codigo, modificadores) {
+  const base = { key: tecla, code: tecla, windowsVirtualKeyCode: codigo, nativeVirtualKeyCode: codigo, modifiers: modificadores };
+  await cdp(tabId, "Input.dispatchKeyEvent", { type: "rawKeyDown", ...base });
+  await cdp(tabId, "Input.dispatchKeyEvent", { type: "keyUp", ...base });
+}
+
+// Sem cursor num editor canvas (Google Docs), clica no documento e vai para o fim do texto.
+const editorCanvasFn = () => {
+  const e = document.querySelector(".kix-appview-editor");
+  if (!e) return null;
+  const r = e.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 220), mac: /Mac/.test(navigator.platform) };
+};
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // contexto da aba que o usuário está vendo, para o agente trabalhar nela
   if (msg.type === "GET_PAGE_CONTEXT") {
@@ -639,8 +658,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           const texto = String(args.texto ?? "");
           // com foco num editor (ex.: Google Docs depois de clicar no documento), a digitação
           // real funciona mesmo onde o texto não fica no DOM
-          const focos = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: focoEditavelFn });
-          if (focos.some((f) => f.result)) {
+          const temFoco = async () => (await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: focoEditavelFn })).some((f) => f.result);
+          let focado = await temFoco();
+          if (!focado) {
+            const editor = await exec(tab.id, editorCanvasFn);
+            if (editor) {
+              try {
+                await cliqueReal(tab.id, editor.x, editor.y);
+                await sleep(500);
+                // fim do documento: Cmd+↓ no Mac, Ctrl+End nos outros
+                if (editor.mac) await teclaComModificador(tab.id, "ArrowDown", 40, 4);
+                else await teclaComModificador(tab.id, "End", 35, 2);
+                await sleep(300);
+                focado = await temFoco();
+              } catch { /* sem chrome.debugger */ }
+            }
+          }
+          if (focado) {
             try {
               await cdp(tab.id, "Input.insertText", { text: texto });
               out = "escrevi o texto como digitação real no ponto do cursor; confira com ler ou olhar";
@@ -686,7 +720,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           await sleep(600);
           await invalidateSnapshot(tab.id, tab.url);
         }
-        else if (tool === "ler") out = await exec(tab.id, readFn, [args.offset | 0]);
+        else if (tool === "ler") {
+          // Google Docs desenha o texto num canvas: o DOM não tem o conteúdo. A exportação
+          // em texto do documento, pedida daqui com a sessão do usuário, traz o que está escrito.
+          const doc = /^https:\/\/docs\.google\.com\/document\/d\/([^/?#]+)/.exec(tab.url || "");
+          const texto = doc && await fetch(`https://docs.google.com/document/d/${doc[1]}/export?format=txt`, { credentials: "include" })
+            .then((r) => (r.ok ? r.text() : null)).catch(() => null);
+          out = texto !== null && texto !== undefined && doc
+            ? "Conteúdo do documento (Google Docs):\n" + texto.replace(/^\uFEFF/, "").slice(0, 12000)
+            : await exec(tab.id, readFn, [args.offset | 0]);
+        }
         else if (tool === "links") out = await exec(tab.id, linksFn);
         else if (tool === "hover") { out = await exec(tab.id, hoverFn, [args.i]); await sleep(400); }
         else if (tool === "limpar") out = await exec(tab.id, clearFn, [args.i]);
