@@ -96,3 +96,15 @@ test("demais ações vão ao background e erros voltam como erro", async () => {
   assert.equal(await ctx.executarAcaoHermes({ tool: "clicar", args: { i: 1 } }), "erro: saiu da página");
   assert.equal(await ctx.executarAcaoHermes({ tool: "ler" }), "x");
 });
+
+test("Meus dados: o valor vai à página, o modelo só vê o marcador", async () => {
+  const chamadas = [];
+  const ctx = carregarHermes({ tool: async (t, a) => { chamadas.push(a); return { ok: true, out: `digitado: ${a.texto}` }; } });
+  ctx.cfg.dados = "email: ana@exemplo.com\nnome: Ana Souza\nlinha sem dois pontos";
+  const saida = await ctx.executarAcaoHermes({ tool: "digitar", args: { i: 3, texto: "{{email}} / {{ nome }} / {{cpf}}" } });
+  assert.equal(chamadas[0].texto, "ana@exemplo.com / Ana Souza / {{cpf}}");
+  assert.equal(chamadas[0].i, 3);
+  assert.equal(saida, "digitado: {{email}} / {{nome}} / {{cpf}}");
+  assert.match(ctx.contextoDosDados(), /\{\{email\}\}, \{\{nome\}\}/);
+  assert.doesNotMatch(ctx.contextoDosDados(), /ana@exemplo/);
+});

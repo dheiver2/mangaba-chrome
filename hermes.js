@@ -67,6 +67,31 @@ async function contextoDaAba() {
   return `\n\n[aba atual: ${r.page.title} — ${r.page.url}]\nTrabalhe nesta aba, a que o usuário está vendo, a não ser que ele peça outra.`;
 }
 
+// "Meus dados": o modelo só conhece os nomes ({{email}}); o valor entra direto na página.
+function meusDados() {
+  const dados = {};
+  for (const linha of (cfg.dados || "").split("\n")) {
+    const i = linha.indexOf(":");
+    const chave = linha.slice(0, i).trim();
+    if (i > 0 && chave) dados[chave] = linha.slice(i + 1).trim();
+  }
+  return dados;
+}
+
+function contextoDosDados() {
+  const chaves = Object.keys(meusDados());
+  if (!chaves.length) return "";
+  return `\n[dados do usuário: ${chaves.map((c) => `{{${c}}}`).join(", ")}]\nPara preencher com eles, digite o marcador exatamente assim; a extensão troca pelo valor na página. Não peça esses dados ao usuário.`;
+}
+
+const trocarMarcadores = (texto, dados) => texto.replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, c) => (c in dados ? dados[c] : m));
+
+// O que volta ao modelo não pode trazer o valor de volta: troca de novo pelo marcador.
+function esconderValores(texto, dados) {
+  for (const [c, v] of Object.entries(dados)) if (v.length >= 3) texto = texto.split(v).join(`{{${c}}}`);
+  return texto;
+}
+
 // Executa uma ação pedida pelo Hermes e devolve o texto que volta para ele.
 // "perguntar" e "extrair" são resolvidas aqui no painel; o resto vai ao background.js.
 async function executarAcaoHermes(acao) {
@@ -80,10 +105,12 @@ async function executarAcaoHermes(acao) {
   if (acao.tool === "extrair") {
     // a extração em si é do modelo; aqui só entregamos o texto da página
     const r = await tool("ler", {});
-    return r.ok ? `Texto da página para extrair "${args.o_que || ""}":\n${r.out}` : "erro: " + (r.error || "falhou");
+    return esconderValores(r.ok ? `Texto da página para extrair "${args.o_que || ""}":\n${r.out}` : "erro: " + (r.error || "falhou"), meusDados());
   }
-  const r = await tool(acao.tool, args);
-  return r.ok ? (r.out ?? "ok") : "erro: " + (r.error || "falhou");
+  const dados = meusDados();
+  const comValores = Object.fromEntries(Object.entries(args).map(([k, v]) => [k, typeof v === "string" ? trocarMarcadores(v, dados) : v]));
+  const r = await tool(acao.tool, comValores);
+  return esconderValores(r.ok ? String(r.out ?? "ok") : "erro: " + (r.error || "falhou"), dados);
 }
 
 // Executa uma tarefa pelo Hermes. Retorna quando o stream termina.
@@ -110,7 +137,7 @@ async function runHermes(task) {
     const fluxo = await fetch(hermesBase() + "/v1/chat/completions", {
       method: "POST",
       headers: { ...cabecalhos, "X-Mangaba-Key": cfg.key || "" },
-      body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task + (await contextoDaAba()) }], stream: true }),
+      body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task + (await contextoDaAba()) + contextoDosDados() }], stream: true }),
       signal: agentRun.abort.signal,
     });
     if (!fluxo.ok) throw new Error(`Hermes respondeu ${fluxo.status}`);

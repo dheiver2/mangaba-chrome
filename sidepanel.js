@@ -14,47 +14,17 @@ let myWindowId = null;
 chrome.windows.getCurrent().then((w) => { myWindowId = w.id; }).catch(() => {});
 
 const DEFAULTS = {
-  url: "https://mangabarouter.store/v1/chat/completions",
-  model: "mangaba-titan", // Mangaba Router: mais capaz (agentes, código, visão)
   hermesUrl: "https://hermes.mangaba.ia.br", // agente: Hermes; o modelo que raciocina é o Mangaba Router
   key: "",
-  maxSteps: 20,
-  maxTimeout: 300,  // 5 min padrão
-  temperature: 0,   // 0 = determinístico, 1 = criativo
-  maxTokens: 700,   // resposta máxima
-  systemPrompt: "", // customizável
   dados: "",
-  mcps: "deepwiki | https://mcp.deepwiki.com/mcp\ncontext7 | https://mcp.context7.com/mcp\n# huggingface | https://huggingface.co/mcp | Bearer hf_SEU_TOKEN"
 };
-// Nomes de modelo que já saíram do Mangaba Router: quem salvou um deles é migrado para o padrão.
-const MODELOS_APOSENTADOS = ["Mangaba-Qwen3-Coder-30B-A3B", "mangaba-pro", "mangaba-max", "mangaba-lite-q4", "mangaba-vision-q8"];
 let cfg = { ...DEFAULTS };
 
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
-  if (MODELOS_APOSENTADOS.includes(saved.model)) {
-    saved.model = DEFAULTS.model;
-    chrome.storage.sync.set({ model: DEFAULTS.model });
-  }
   cfg = saved;
   $("cfgKey").value = cfg.key;
-  $("cfgSteps").value = cfg.maxSteps;
-  $("cfgTimeout").value = cfg.maxTimeout || 300;
-  $("cfgTemperature").value = cfg.temperature ?? 0;
-  $("cfgMaxTokens").value = cfg.maxTokens ?? 700;
-  $("cfgSystemPrompt").value = cfg.systemPrompt || "";
   $("cfgDados").value = cfg.dados || "";
-  $("cfgMcps").value = cfg.mcps ?? DEFAULTS.mcps;
 });
-
-// pré-carga assíncrona do modelo no gateway (HD USB 2.0 → RAM) para matar o cold-start
-function warmup() {
-  if (!cfg.model) return;
-  const base = cfg.url.replace(/\/v1\/chat\/completions\/?$/, "");
-  // O Mangaba Router não tem /api/v1/<modelo>/load (é rota do gateway antigo): não pré-carregar nele
-  if (base === "https://mangabarouter.store") return;
-  fetch(`${base}/api/v1/${cfg.model}/load`, { method: "POST", headers: gatewayHeaders() }).catch(() => {});
-}
-setTimeout(warmup, 400); // após carregar cfg do storage
 
 // Carregar histórico ao iniciar
 (async () => {
@@ -77,22 +47,6 @@ $("btnClearHistory").onclick = async () => {
   }
 };
 
-$("btnRefreshMcps").onclick = async () => {
-  $("btnRefreshMcps").disabled = true;
-  $("btnRefreshMcps").textContent = "🔄 Atualizando...";
-  try {
-    const cat = await mcpDiscover(cfg.mcps || DEFAULTS.mcps);
-    updateMcpStatus(cat);
-    $("btnRefreshMcps").textContent = "✓ Atualizado";
-    setTimeout(() => { $("btnRefreshMcps").textContent = "🔄 Atualizar"; }, 2000);
-  } catch (e) {
-    $("btnRefreshMcps").textContent = "❌ Erro";
-    console.error("MCP refresh erro:", e);
-  } finally {
-    $("btnRefreshMcps").disabled = false;
-  }
-};
-
 // Teclado shortcuts
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey) {
@@ -102,10 +56,6 @@ document.addEventListener("keydown", (e) => {
     } else if (e.key === "Enter" && input.value.trim()) {
       e.preventDefault();
       btnSend.click();
-    } else if (e.key === "k" || e.key === "K") {
-      e.preventDefault();
-      $("cfgSteps").value = 20; // reset a valores padrão como "limpar cache"
-      addMsg("assistant").textContent = "🗑 Cache limpo (snapshots, respostas, modelos).";
     } else if (e.key === "l" || e.key === "L") {
       e.preventDefault();
       if (confirm("Limpar histórico?")) {
@@ -118,23 +68,11 @@ document.addEventListener("keydown", (e) => {
   }
 });
 $("btnSave").onclick = () => {
-  cfg = {
-    url: DEFAULTS.url,
-    model: DEFAULTS.model,
-    key: $("cfgKey").value.trim(),
-    maxSteps: Math.min(50, Math.max(3, parseInt($("cfgSteps").value) || 20)),
-    maxTimeout: Math.min(600, Math.max(60, parseInt($("cfgTimeout").value) || 300)),
-    temperature: Math.min(1, Math.max(0, parseFloat($("cfgTemperature").value) || 0)),
-    maxTokens: Math.min(4000, Math.max(100, parseInt($("cfgMaxTokens").value) || 700)),
-    systemPrompt: $("cfgSystemPrompt").value.trim(),
-    dados: $("cfgDados").value.trim(),
-    mcps: $("cfgMcps").value.trim()
-  };
+  cfg = { ...cfg, key: $("cfgKey").value.trim(), dados: $("cfgDados").value.trim() };
   if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
   $("settings").classList.add("hidden");
   if (account) syncPush(account).catch(() => {});
 
-  warmup();
 };
 
 // ---------- renderização Markdown (sem dependências, HTML sempre escapado) ----------
@@ -221,11 +159,6 @@ function setAssistant(div, text) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-function gatewayHeaders() {
-  const headers = { "Content-Type": "application/json" };
-  if (cfg.key) headers.Authorization = "Bearer " + cfg.key;
-  return headers;
-}
 
  // {t, data} — lista de /v1/models por 5 min
 // reenvia se o service worker MV3 tiver morrido (o próprio reenvio o reacorda)
@@ -282,37 +215,10 @@ async function tool(t, args) {
 let agentRun = null; // {cancel, waiting}
   // para atualizar status visual em retry
 
-let lastMcpCatalog = [];  // Guardar último catálogo MCP para UI
-
 function setStop(on) {
   btnSend.textContent = on ? "■" : "↑";
   btnSend.title = on ? "Parar tarefa" : "Enviar";
   btnSend.classList.toggle("stop", on);
-}
-
-// MCP Management UI: mostrar status dos servidores
-function updateMcpStatus(cat) {
-  if (!cat || cat.length === 0) {
-    document.getElementById("mcpStatus").style.display = "none";
-    return;
-  }
-
-  lastMcpCatalog = cat;
-  const mcpStatus = document.getElementById("mcpStatus");
-  const mcpList = document.getElementById("mcpList");
-
-  mcpStatus.style.display = "block";
-  mcpList.innerHTML = cat.map((c) => {
-    const emoji = c.erro ? "❌" : "✅";
-    // c.erro pode vir do corpo de erro JSON-RPC devolvido pelo PRÓPRIO servidor MCP (não é
-    // texto nosso) — um servidor malicioso/comprometido poderia colocar HTML/script ali. c.nome
-    // vem da configuração do usuário, mas escapamos os dois por igual: innerHTML nunca deve
-    // receber texto de fora sem passar por esc() primeiro.
-    const status = c.erro ? `offline: ${esc(c.erro.slice(0, 30))}...` : `${c.tools?.length || 0} ferramentas`;
-    return `<div style="padding: 6px; border-bottom: 1px solid #ddd; font-size: 11px;">
-      ${emoji} <strong>${esc(c.nome)}</strong> — ${status}
-    </div>`;
-  }).join("");
 }
 
 // Modal de Login/2FA
