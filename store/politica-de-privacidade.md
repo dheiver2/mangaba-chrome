@@ -1,7 +1,7 @@
 # Política de Privacidade — Mangaba AI
 
-**Última atualização:** [preencher na publicação]
-**Responsável:** Dheiver Santos — contato: [e-mail de privacidade]
+**Última atualização:** 26 de outubro de 2026
+**Responsável:** Dheiver Santos — contato: dheiver.santos@mangaba.ia.br
 
 Esta política explica quais dados a extensão Mangaba AI trata, para quê, com quem compartilha e como você controla isso. Ela segue a LGPD.
 
@@ -46,7 +46,7 @@ Não há outros destinatários.
 
 ## 6. Seus direitos
 
-Você pode, a qualquer momento: acessar, corrigir ou excluir seus dados; revogar o consentimento; e pedir a exclusão da conta. Para isso, use [canal de pedidos] ou o botão de excluir conta no painel. O pedido é atendido em até 15 dias.
+Você pode, a qualquer momento: acessar, corrigir ou excluir seus dados; revogar o consentimento; e pedir a exclusão da conta. Para isso, escreva para dheiver.santos@mangaba.ia.br ou use o botão de excluir conta no painel. O pedido é atendido em até 15 dias.
 
 Você também pode apagar tudo localmente desinstalando a extensão, o que remove o que fica no seu navegador.
 
