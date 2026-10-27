@@ -41,11 +41,14 @@ const invalidateSnapshot = async (tabId, url) => {
 // via chrome.windows.getCurrent()). Sem isso, "currentWindow" aqui no service worker
 // resolve pra ÚLTIMA janela com foco do SO, não necessariamente a do side panel que
 // pediu — com várias janelas do Chrome abertas, isso lia a aba errada silenciosamente.
-async function getTab(windowId) {
+// permitirInterna: ações que só trocam o endereço (navegar, voltar…) funcionam também a
+// partir de uma aba nova ou about:blank, onde não dá para ler nem mexer na página.
+async function getTab(windowId, permitirInterna = false) {
   const query = windowId ? { active: true, windowId } : { active: true, currentWindow: true };
   const [tab] = await chrome.tabs.query(query);
-  if (!tab?.id || /^(chrome|edge|about|chrome-extension):/.test(tab.url || ""))
-    throw new Error("Página não acessível");
+  if (!tab?.id) throw new Error("Página não acessível");
+  if (!permitirInterna && /^(chrome|edge|about|chrome-extension):/.test(tab.url || ""))
+    throw new Error("esta aba é uma página interna do navegador; use navegar para abrir um site");
   return tab;
 }
 
@@ -579,7 +582,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           ).join("\n\n");
         }
       } else {
-        const tab = await getTab(msg.windowId);
+        const tab = await getTab(msg.windowId, ["navegar", "voltar", "avancar", "recarregar"].includes(tool));
         if (tool === "snapshot") {
           const cached = await getCachedSnapshot(tab.id, tab.url);
           if (cached) {
@@ -664,9 +667,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           await sleep(500); await waitLoad(tab.id);
           out = "naveguei para " + args.url;
         } else if (tool === "voltar") {
-          try { await chrome.tabs.goBack(tab.id); } catch { out = "não há página anterior"; }
-          await sleep(500); await waitLoad(tab.id, 6000);
-          out = out || "voltei para a página anterior";
+          const antes = tab.url;
+          try { await chrome.tabs.goBack(tab.id); } catch { await exec(tab.id, () => history.back()).catch(() => {}); }
+          await sleep(800); await waitLoad(tab.id, 6000);
+          const depois = (await chrome.tabs.get(tab.id)).url;
+          out = depois !== antes ? "voltei para " + depois : "não há página anterior nesta aba";
         } else if (tool === "rolar") {
           out = await exec(tab.id, scrollFn, [args.dir || "baixo"]);
           await invalidateSnapshot(tab.id, tab.url);
@@ -726,38 +731,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Detectar paginação: retorna {tipo, total, atual, proximo_elemento}
 const detectarPaginacaoFn = () => {
-  // :contains() é seletor do jQuery, não existe no querySelectorAll nativo — lançaria
-  // SyntaxError se esta função rodasse (hoje é código morto: nenhuma ferramenta chamada
-  // "detectar_paginacao" está em TOOL_NAMES, então o modelo nunca consegue chamá-la).
-  // Filtra por texto em JS em vez de tentar :contains() na engine do CSS.
-  const porTexto = (sel, termos) => [...document.querySelectorAll(sel)].filter((el) => {
-    const t = (el.innerText || el.textContent || "").trim();
-    return termos.some((termo) => t.includes(termo));
-  });
-  const sigs = {
-    proximo: [
-      ...document.querySelectorAll('a[rel="next"], a[aria-label*="next"], a[aria-label*="Próxima"]'),
-      ...porTexto("button, a", ["Próxima", ">", "→"])
-    ],
-    carregar_mais: [...porTexto("button, a", ["Carregar", "Carregar mais"]), ...document.querySelectorAll('[class*="load-more"]')],
-    pagina_numerada: [...document.querySelectorAll('a[href*="page"], a[href*="p="]')],
-    indicador: document.querySelector('[aria-label*="of"], [aria-label*="de"], .pagination')
-  };
-  
-  const tem = (k) => sigs[k].length > 0;
-  const tipo = tem("proximo") ? "pagination" : tem("carregar_mais") ? "infinite" : "none";
-  
-  // Tentar extrair "X de Y"
+  const visivel = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const texto = (el) => (el.innerText || el.textContent || el.getAttribute("aria-label") || "").trim();
+  const PROXIMO = /^(pr[oó]xim[oa]|seguinte|next|avan[cç]ar|mais resultados|[»›→>]|next\s*[»›→>])$/i;
+  const MAIS = /^(carregar mais|ver mais|mostrar mais|load more|show more)$/i;
+  const links = [...document.querySelectorAll("a, button, [role='button'], [role='link']")].filter(visivel);
+  const proximo = document.querySelector('a[rel="next"]')
+    || links.find((el) => PROXIMO.test(texto(el)) || /next|pr[oó]xim/i.test(el.getAttribute("aria-label") || ""));
+  const mais = links.find((el) => MAIS.test(texto(el)));
+  const tipo = proximo ? "paginacao" : mais ? "carregar_mais" : "nenhuma";
+  // "Página 1 de 50", "Page 1 of 50", "1 / 50"
   const txt = document.body?.innerText || "";
-  const match = txt.match(/(\d+)\s+de\s+(\d+)/i) || txt.match(/(\d+)\s+\/\s+(\d+)/);
-  const atual = match ? parseInt(match[1]) : 1;
-  const total = match ? parseInt(match[2]) : atual + 1;
-  
+  const m = txt.match(/(?:p[aá]gina|page)\s+(\d+)\s+(?:de|of)\s+(\d+)/i) || txt.match(/\b(\d+)\s+(?:de|of)\s+(\d+)\s+p[aá]ginas?/i);
+  const alvo = proximo || mais;
   return {
     tipo,
-    total_paginas: total,
-    pagina_atual: atual,
-    proximo_elemento: sigs.proximo[0] || sigs.carregar_mais[0] || null
+    pagina_atual: m ? Number(m[1]) : null,
+    total_paginas: m ? Number(m[2]) : null,
+    proximo: alvo ? { texto: texto(alvo).slice(0, 40), href: alvo.href || null } : null,
+    dica: alvo ? "faça snapshot e clique no elemento com esse texto para avançar" : "não achei controle de próxima página",
   };
 };
 
