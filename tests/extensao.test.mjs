@@ -73,3 +73,26 @@ test("escrever ignora frames sem área editável", () => {
   const fn = escreverFn({ body: { isContentEditable: false }, execCommand: () => true });
   assert.equal(fn("x").ok, false);
 });
+
+test("perguntar mostra a pergunta e devolve a resposta do usuário ao Hermes", async () => {
+  const mensagens = [];
+  const ctx = carregarHermes({ addMsg: (c, t) => mensagens.push([c, t]), input: { placeholder: "" }, agentRun: {}, tool: async () => ({ ok: true }) });
+  const pendente = ctx.executarAcaoHermes({ tool: "perguntar", args: { pergunta: "Qual o CPF?" } });
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(mensagens[0][1], /Qual o CPF\?/);
+  ctx.agentRun.waiting("123");
+  assert.equal(await pendente, "resposta do usuário: 123");
+});
+
+test("extrair entrega o texto da página para o modelo extrair", async () => {
+  const ctx = carregarHermes({ tool: async (t) => (t === "ler" ? { ok: true, out: "Total: R$ 10" } : { ok: false }) });
+  const saida = await ctx.executarAcaoHermes({ tool: "extrair", args: { o_que: "valor total" } });
+  assert.match(saida, /valor total/);
+  assert.match(saida, /Total: R\$ 10/);
+});
+
+test("demais ações vão ao background e erros voltam como erro", async () => {
+  const ctx = carregarHermes({ tool: async (t) => (t === "clicar" ? { ok: false, error: "saiu da página" } : { ok: true, out: "x" }) });
+  assert.equal(await ctx.executarAcaoHermes({ tool: "clicar", args: { i: 1 } }), "erro: saiu da página");
+  assert.equal(await ctx.executarAcaoHermes({ tool: "ler" }), "x");
+});

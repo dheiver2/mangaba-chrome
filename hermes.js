@@ -67,6 +67,25 @@ async function contextoDaAba() {
   return `\n\n[aba atual: ${r.page.title} — ${r.page.url}]\nTrabalhe nesta aba, a que o usuário está vendo, a não ser que ele peça outra.`;
 }
 
+// Executa uma ação pedida pelo Hermes e devolve o texto que volta para ele.
+// "perguntar" e "extrair" são resolvidas aqui no painel; o resto vai ao background.js.
+async function executarAcaoHermes(acao) {
+  const args = acao.args || {};
+  if (acao.tool === "perguntar") {
+    addMsg("assistant", "❓ " + (args.pergunta || "Preciso de uma informação sua para continuar."));
+    input.placeholder = "Responda ao agente…";
+    const resposta = await new Promise((resolver) => { agentRun.waiting = resolver; });
+    return "resposta do usuário: " + resposta;
+  }
+  if (acao.tool === "extrair") {
+    // a extração em si é do modelo; aqui só entregamos o texto da página
+    const r = await tool("ler", {});
+    return r.ok ? `Texto da página para extrair "${args.o_que || ""}":\n${r.out}` : "erro: " + (r.error || "falhou");
+  }
+  const r = await tool(acao.tool, args);
+  return r.ok ? (r.out ?? "ok") : "erro: " + (r.error || "falhou");
+}
+
 // Executa uma tarefa pelo Hermes. Retorna quando o stream termina.
 async function runHermes(task) {
   agentRun = { cancel: false, waiting: null, abort: new AbortController() };
@@ -100,8 +119,7 @@ async function runHermes(task) {
       if (quadro.evento === "navegador.acao") {
         // sequencial de propósito: a próxima ação depende do que esta encontrou na página
         const acao = JSON.parse(quadro.dados);
-        const r = await tool(acao.tool, acao.args || {});
-        const saida = r.ok ? (r.out ?? "ok") : "erro: " + (r.error || "falhou");
+        const saida = await executarAcaoHermes(acao);
         await fetch(hermesBase() + "/navegador/resultado", {
           method: "POST",
           headers: cabecalhos,

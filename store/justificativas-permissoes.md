@@ -15,7 +15,7 @@ Use estes textos na revisão da Chrome Web Store. Cada permissão do manifest te
 **Pergunta provável do revisor:** "Por que todos os sites?"
 Resposta sugerida: as tarefas são definidas pelo usuário e podem envolver qualquer site. A extensão só age na aba ativa e apenas após um pedido explícito no painel. Não há coleta de navegação nem execução em páginas fora da tarefa pedida.
 
-**Permissões que não devem ser adicionadas sem motivo forte:** `debugger`. Se for usada para digitar em editores como o Google Docs, o revisor vai exigir uma justificativa específica e o Chrome mostra um aviso ao usuário.
+**debugger:** usado só para entregar à página o clique, a digitação e as teclas que o usuário pediu, como eventos de entrada reais (protocolo do DevTools: Input.dispatchMouseEvent, Input.insertText, Input.dispatchKeyEvent). Muitos sites e editores, como o Google Docs e aplicativos de chat, ignoram eventos simulados por script. A extensão se anexa apenas à aba da tarefa, apenas durante as ações pedidas, e se desconecta sozinha após 20 segundos sem ações. Não lê tráfego de rede, não altera páginas e não fica anexada em segundo plano. Enquanto anexada, o Chrome mostra o aviso padrão de depuração.
 
 ## Campos da aba "Privacy practices"
 
@@ -38,3 +38,5 @@ Não usamos código remoto. Todo o JavaScript da extensão está no pacote envia
 **tabs:** lista as abas da janela e troca de aba quando a tarefa exige. Não lê histórico de navegação.
 
 **windows:** identifica a janela onde o painel está aberto, para agir na aba correta.
+
+**debugger (campo da aba Privacy):** entrega o clique, a digitação e as teclas pedidas pelo usuário como eventos reais, que sites e editores aceitam (Google Docs, chats, formulários com validação). Anexa só à aba da tarefa, só durante as ações, e se desconecta após 20 segundos sem uso. Não lê rede nem conteúdo fora da tarefa.

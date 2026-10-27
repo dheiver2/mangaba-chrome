@@ -229,9 +229,72 @@ const flashFn = (el) => {
   el.style.outline = "3px solid #F0781E";
   setTimeout(() => (el.style.outline = o), 700);
 };
+// Localiza o elemento [i] para uma ação "de verdade": rola até ele e devolve o centro em
+// coordenadas da janela principal (somando os iframes), avisando se está coberto ou desabilitado.
+const alvoFn = (i) => {
+  const el = (window.__mgbEls || [])[i];
+  if (!el) return { ok: false, erro: "o elemento [" + i + "] não existe; faça snapshot de novo" };
+  if (!el.isConnected) return { ok: false, erro: "o elemento [" + i + "] saiu da página (ela mudou); faça snapshot de novo" };
+  el.scrollIntoView({ block: "center", inline: "center" });
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return { ok: false, erro: "o elemento [" + i + "] está invisível" };
+  const doc = el.ownerDocument;
+  const vw = doc.defaultView;
+  // ponto de toque: centro do pedaço visível do elemento
+  let x = (Math.max(r.left, 0) + Math.min(r.right, vw.innerWidth)) / 2;
+  let y = (Math.max(r.top, 0) + Math.min(r.bottom, vw.innerHeight)) / 2;
+  const raiz = el.getRootNode();
+  const topo = (raiz.elementFromPoint ? raiz : doc).elementFromPoint(x, y);
+  const descrever = (n) => (n.tagName.toLowerCase() + " \"" + (n.innerText || n.getAttribute("aria-label") || "").trim().slice(0, 40) + "\"");
+  const coberto = topo && topo !== el && !el.contains(topo) && !topo.contains(el) ? descrever(topo) : null;
+  let w = vw;
+  while (w && w.frameElement) {
+    const fr = w.frameElement.getBoundingClientRect();
+    x += fr.left + w.frameElement.clientLeft;
+    y += fr.top + w.frameElement.clientTop;
+    w = w.parent;
+  }
+  return { ok: true, x, y, coberto, desabilitado: !!el.disabled || el.getAttribute("aria-disabled") === "true" };
+};
+
+// Foca o campo [i] e seleciona o conteúdo, para o texto digitado substituir o que havia.
+const focoFn = (i, selecionar) => {
+  const el = (window.__mgbEls || [])[i];
+  if (!el || !el.isConnected) return { ok: false, erro: "o elemento [" + i + "] não está mais na página; faça snapshot de novo" };
+  if (el.type === "password") return { ok: false, erro: "recusado: campo de senha — peça que o usuário digite manualmente" };
+  el.scrollIntoView({ block: "center" });
+  el.focus();
+  if (selecionar) {
+    if (typeof el.select === "function" && /^(INPUT|TEXTAREA)$/.test(el.tagName)) el.select();
+    else if (el.isContentEditable) {
+      const sel = el.ownerDocument.getSelection();
+      const range = el.ownerDocument.createRange();
+      range.selectNodeContents(el);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+  return { ok: true };
+};
+
+// Valor atual do campo [i], para conferir se a digitação pegou.
+const valorFn = (i) => {
+  const el = (window.__mgbEls || [])[i];
+  if (!el) return null;
+  return el.isContentEditable ? el.innerText : String(el.value ?? el.innerText ?? "");
+};
+
+// Há um campo editável com foco neste frame? (para escrever em editores como o Google Docs)
+const focoEditavelFn = () => {
+  if (!document.hasFocus()) return false;
+  const a = document.activeElement;
+  return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName));
+};
+
 const clickFn = (i) => {
   const el = (window.__mgbEls || [])[i];
   if (!el) return "elemento [" + i + "] não encontrado (a página mudou? refaça o snapshot agindo de novo)";
+  if (!el.isConnected) return "o elemento [" + i + "] saiu da página (ela mudou); faça snapshot de novo";
   el.scrollIntoView({ block: "center" });
   const o = el.style.outline;
   el.style.outline = "3px solid #F0781E";
@@ -265,8 +328,14 @@ const typeFn = (i, texto) => {
   el.style.outline = "3px solid #F0781E";
   setTimeout(() => (el.style.outline = o), 700);
   el.focus();
-  if (el.isContentEditable) el.textContent = texto;
-  else {
+  if (el.isContentEditable) {
+    const sel = el.ownerDocument.getSelection();
+    const range = el.ownerDocument.createRange();
+    range.selectNodeContents(el);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    if (!el.ownerDocument.execCommand("insertText", false, texto)) el.textContent = texto;
+  } else {
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const set = Object.getOwnPropertyDescriptor(proto, "value")?.set;
     set ? set.call(el, texto) : (el.value = texto);
@@ -277,8 +346,14 @@ const typeFn = (i, texto) => {
 };
 const keyFn = (i, key) => {
   const el = (window.__mgbEls || [])[i] || document.activeElement;
-  for (const type of ["keydown", "keypress", "keyup"])
-    el.dispatchEvent(new KeyboardEvent(type, { key, code: key, bubbles: true }));
+  const codigos = { Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
+  const kc = codigos[key] || (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0);
+  for (const type of ["keydown", "keypress", "keyup"]) {
+    const ev = new KeyboardEvent(type, { key, code: key, bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "keyCode", { get: () => kc });
+    Object.defineProperty(ev, "which", { get: () => kc });
+    el.dispatchEvent(ev);
+  }
   if (key === "Enter") el.closest("form")?.requestSubmit?.();
   return "pressionei " + key;
 };
@@ -402,6 +477,43 @@ async function waitLoad(tabId, ms = 10000) {
   }
 }
 
+// ---- entrada real (chrome.debugger) ----
+// Eventos sintéticos (dispatchEvent) chegam com isTrusted=false: muitos sites e editores
+// (Google Docs, chats, React com validação) os ignoram. Pelo protocolo do DevTools o clique e
+// a digitação chegam como se fossem do usuário. Fica anexado só enquanto há ações seguidas.
+const anexados = new Map(); // tabId -> timer para soltar
+const SOLTAR_APOS_MS = 20000;
+async function cdp(tabId, metodo, params = {}) {
+  if (anexados.has(tabId)) clearTimeout(anexados.get(tabId));
+  else await chrome.debugger.attach({ tabId }, "1.3");
+  anexados.set(tabId, setTimeout(() => {
+    anexados.delete(tabId);
+    chrome.debugger.detach({ tabId }).catch(() => {});
+  }, SOLTAR_APOS_MS));
+  return chrome.debugger.sendCommand({ tabId }, metodo, params);
+}
+chrome.debugger.onDetach.addListener(({ tabId }) => {
+  clearTimeout(anexados.get(tabId));
+  anexados.delete(tabId);
+});
+
+async function cliqueReal(tabId, x, y) {
+  await cdp(tabId, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  await cdp(tabId, "Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await cdp(tabId, "Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+}
+
+const TECLAS_REAIS = {
+  Enter: [13, "\r"], Tab: [9], Escape: [27], Backspace: [8], Delete: [46], Space: [32, " "],
+  ArrowUp: [38], ArrowDown: [40], ArrowLeft: [37], ArrowRight: [39], PageUp: [33], PageDown: [34], Home: [36], End: [35],
+};
+async function teclaReal(tabId, tecla) {
+  const [codigo, texto] = TECLAS_REAIS[tecla] || [tecla.length === 1 ? tecla.toUpperCase().charCodeAt(0) : 0, tecla.length === 1 ? tecla : undefined];
+  const base = { key: tecla === "Space" ? " " : tecla, code: tecla, windowsVirtualKeyCode: codigo, nativeVirtualKeyCode: codigo };
+  await cdp(tabId, "Input.dispatchKeyEvent", { type: texto ? "keyDown" : "rawKeyDown", ...base, ...(texto ? { text: texto } : {}) });
+  await cdp(tabId, "Input.dispatchKeyEvent", { type: "keyUp", ...base });
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // contexto da aba que o usuário está vendo, para o agente trabalhar nela
   if (msg.type === "GET_PAGE_CONTEXT") {
@@ -493,17 +605,59 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         else if (tool === "marcar") out = await exec(tab.id, marcarFn, [args.i, args.valor]);
         else if (tool === "curtir") { out = await exec(tab.id, clickFn, [args.i]); await sleep(600); }
         else if (tool === "clicar") {
-          out = await exec(tab.id, clickFn, [args.i]);
+          const alvo = await exec(tab.id, alvoFn, [args.i]);
+          if (!alvo.ok) throw new Error(alvo.erro);
+          const antes = (await chrome.tabs.get(tab.id)).url;
+          let real = true;
+          try { await cliqueReal(tab.id, alvo.x, alvo.y); } catch { real = false; await exec(tab.id, clickFn, [args.i]); }
           await sleep(800); await waitLoad(tab.id, 6000);
-        } else if (tool === "digitar") out = await exec(tab.id, typeFn, [args.i, String(args.texto ?? "")]);
+          const depois = (await chrome.tabs.get(tab.id)).url;
+          out = "cliquei em [" + args.i + "]" + (real ? "" : " (modo simulado)")
+            + (alvo.desabilitado ? " — atenção: o elemento estava desabilitado" : "")
+            + (alvo.coberto ? " — atenção: havia outro elemento por cima (" + alvo.coberto + "); confira o resultado" : "")
+            + (depois !== antes ? " — a página mudou para " + depois : "");
+        } else if (tool === "digitar") {
+          const texto = String(args.texto ?? "");
+          const foco = await exec(tab.id, focoFn, [args.i, true]);
+          if (!foco.ok) throw new Error(foco.erro);
+          let real = true;
+          try { await cdp(tab.id, "Input.insertText", { text: texto }); } catch { real = false; }
+          let valor = await exec(tab.id, valorFn, [args.i]);
+          if (!real || !String(valor ?? "").includes(texto.slice(0, 30))) {
+            await exec(tab.id, typeFn, [args.i, texto]);
+            valor = await exec(tab.id, valorFn, [args.i]);
+            real = false;
+          }
+          const pegou = String(valor ?? "").includes(texto.slice(0, 30));
+          if (!pegou) throw new Error("o campo [" + args.i + "] não aceitou o texto; valor atual: \"" + String(valor ?? "").slice(0, 80) + "\"");
+          out = "digitei em [" + args.i + "]" + (real ? "" : " (modo simulado)") + "; valor agora: \"" + String(valor).slice(0, 80) + "\"";
+        }
         else if (tool === "escrever") {
-          const frames = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: escreverFn, args: [String(args.texto ?? "")] });
-          const feito = frames.map((f) => f.result).find((r) => r && r.ok);
-          if (!feito) throw new Error("o editor não aceitou o texto (ou não achei a área de edição); clique dentro do documento e tente de novo. Não escrevi nada.");
-          out = "escrevi o texto no documento";
+          const texto = String(args.texto ?? "");
+          // com foco num editor (ex.: Google Docs depois de clicar no documento), a digitação
+          // real funciona mesmo onde o texto não fica no DOM
+          const focos = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: focoEditavelFn });
+          if (focos.some((f) => f.result)) {
+            try {
+              await cdp(tab.id, "Input.insertText", { text: texto });
+              out = "escrevi o texto como digitação real no ponto do cursor; confira com ler ou olhar";
+            } catch { /* sem chrome.debugger: cai no modo simulado abaixo */ }
+          }
+          if (out === undefined) {
+            const frames = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: escreverFn, args: [texto] });
+            const feito = frames.map((f) => f.result).find((r) => r && r.ok);
+            if (!feito) throw new Error("o editor não aceitou o texto (ou não achei a área de edição); clique dentro do documento e tente de novo. Não escrevi nada.");
+            out = "escrevi o texto no documento (modo simulado)";
+          }
         }
         else if (tool === "tecla") {
-          out = await exec(tab.id, keyFn, [args.i, args.tecla || "Enter"]);
+          const tecla = args.tecla || "Enter";
+          if (Number.isInteger(args.i)) {
+            const foco = await exec(tab.id, focoFn, [args.i, false]);
+            if (!foco.ok) throw new Error(foco.erro);
+          }
+          try { await teclaReal(tab.id, tecla); out = "pressionei " + tecla; }
+          catch { out = await exec(tab.id, keyFn, [args.i, tecla]) + " (modo simulado)"; }
           await sleep(800); await waitLoad(tab.id, 6000);
         } else if (tool === "navegar") {
           await chrome.tabs.update(tab.id, { url: args.url });

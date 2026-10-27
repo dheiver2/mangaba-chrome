@@ -7,7 +7,8 @@
     "build:dev": "bash build.sh dev",
     "build:watch": "nodemon --watch '*.js' --watch '*.html' --watch '*.css' -e js,html,css --exec 'npm run build:dev'",
     "test": "node --test tests/extensao.test.mjs",
-    "lint": "eslint '*.js' --fix 2>/dev/null || echo 'ESLint não instalado'"
+    "lint": "eslint '*.js' --fix 2>/dev/null || echo 'ESLint não instalado'",
+    "test:chrome": "bash build.sh dev && node tests/integracao-chrome.mjs"
   },
   "devDependencies": {
     "terser": "^5.24.0",

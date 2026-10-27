@@ -1,0 +1,29 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>teste-acoes</title>
+<style>body{font-family:sans-serif;padding:20px} .linha{margin:12px 0}</style></head>
+<body>
+<h1>Página de teste de ações</h1>
+<!-- só aceita clique real (isTrusted), como sites com proteção contra robôs -->
+<div class="linha"><button id="real">Confirmar pedido</button> <span id="real-st">pendente</span></div>
+<!-- campo que recusa digitação sintética -->
+<div class="linha"><input id="nome" placeholder="Nome completo"> <span id="nome-st"></span></div>
+<!-- chat: Enter real envia a mensagem -->
+<div class="linha"><input id="chat" placeholder="Mensagem"> <ul id="msgs"></ul></div>
+<!-- editor rico que só aceita entrada real -->
+<div class="linha"><div id="editor" contenteditable="true" style="border:1px solid #999;min-height:40px">texto antigo</div></div>
+<!-- botão coberto por uma camada transparente -->
+<div class="linha" style="position:relative;height:40px"><button id="coberto">Botão coberto</button>
+  <div id="capa" style="position:absolute;left:0;top:0;width:220px;height:40px;background:rgba(0,0,0,.05)"></div></div>
+<!-- editor em iframe, como o Google Docs: só aceita entrada real -->
+<div class="linha"><iframe id="doc" style="width:400px;height:80px;border:1px solid #999"
+  srcdoc="<html><body contenteditable='true' style='margin:4px'></body><script>document.body.addEventListener('beforeinput',e=>{if(!e.isTrusted)e.preventDefault()})</script></html>"></iframe></div>
+<script>
+  document.getElementById('real').addEventListener('click', e => { if (e.isTrusted) document.getElementById('real-st').textContent = 'confirmado'; });
+  const nome = document.getElementById('nome');
+  nome.addEventListener('beforeinput', e => { if (!e.isTrusted) e.preventDefault(); });
+  nome.addEventListener('input', () => { document.getElementById('nome-st').textContent = nome.value; });
+  const chat = document.getElementById('chat');
+  chat.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.isTrusted && chat.value) { const li = document.createElement('li'); li.textContent = chat.value; document.getElementById('msgs').appendChild(li); chat.value = ''; }
+  });
+  document.getElementById('editor').addEventListener('beforeinput', e => { if (!e.isTrusted) e.preventDefault(); });
+</script></body></html>

@@ -17,6 +17,8 @@ Esta política explica quais dados a extensão Mangaba AI trata, para quê, com 
 
 **e) Registro técnico.** Identificador da instalação do agente, a data e o volume de uso necessários para funcionar e para os limites de cota.
 
+**f) Depuração da aba durante ações.** Para que cliques e digitação funcionem em sites que recusam eventos simulados, a extensão usa a permissão de depuração do Chrome na aba da tarefa, apenas enquanto executa as ações que você pediu. Ela não lê o tráfego de rede e se desconecta sozinha logo depois.
+
 ## 2. O que não coletamos
 
 - Senhas, números de cartão ou documentos que você digita em sites. O agente se recusa a digitar senhas e pede que você entre pessoalmente.
