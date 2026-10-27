@@ -9,8 +9,11 @@ const server = createApp({ pool, jwtSecret: "teste-segredo-com-mais-de-32-caract
 let base;
 const unique = () => `u${Date.now()}${Math.random().toString(36).slice(2, 7)}@exemplo.com`;
 
-async function call(method, path, { body, token, origin } = {}) {
-  const headers = { "Content-Type": "application/json" };
+// IP aleatório por chamada: o limite de tentativas agora persiste no banco entre execuções.
+const ipAleatorio = () => `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
+
+async function call(method, path, { body, token, origin, ip } = {}) {
+  const headers = { "Content-Type": "application/json", "X-Forwarded-For": ip || ipAleatorio() };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (origin) headers.Origin = origin;
   const res = await fetch(base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -120,5 +123,19 @@ test("exclusão de conta: exige a senha e apaga a conta e os dados", async () =>
   assert.equal((await call("GET", "/auth/me", { token: s.json.token })).status, 401);
   const { rows } = await pool.query("select count(*)::int as n from user_data ud join users u on u.id = ud.user_id where u.email = $1", [email]);
   assert.equal(rows[0].n, 0);
+});
+
+test("limite de tentativas persiste e bloqueia a 21ª tentativa do mesmo IP", async () => {
+  const ip = `192.0.2.${Math.floor(Math.random() * 250)}`;
+  await pool.query("delete from auth_tentativas where ip = $1", [ip]);
+  for (let i = 0; i < 20; i++) {
+    const r = await call("POST", "/auth/login", { ip, body: { email: unique(), password: "x-errada-123" } });
+    assert.equal(r.status, 401);
+  }
+  const bloqueado = await call("POST", "/auth/login", { ip, body: { email: unique(), password: "x-errada-123" } });
+  assert.equal(bloqueado.status, 429);
+  const outroIp = await call("POST", "/auth/login", { body: { email: unique(), password: "x-errada-123" } });
+  assert.equal(outroIp.status, 401);
+  await pool.query("delete from auth_tentativas where ip = $1", [ip]);
 });
 

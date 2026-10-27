@@ -49,15 +49,20 @@ function send(res, origin, status, data) {
 
 export function createHandler({ pool, jwtSecret }) {
   if (!jwtSecret || jwtSecret.length < 32) throw new Error("JWT_SECRET precisa ter pelo menos 32 caracteres");
-  const tries = new Map(); // ip → [timestamps] (limite de tentativas de login/cadastro)
 
-  function limitAuth(ip) {
-    const now = Date.now();
-    const recent = (tries.get(ip) || []).filter((t) => now - t < AUTH_WINDOW_MS);
-    if (recent.length >= AUTH_MAX_TRIES) throw new HttpError(429, "muitas tentativas; aguarde alguns minutos");
-    recent.push(now);
-    tries.set(ip, recent);
+  // Limite de tentativas de login/cadastro guardado no banco: em funções serverless cada
+  // instância tem memória própria, e um Map em memória não limitava nada de verdade.
+  async function limitAuth(ip) {
+    const janela = `${AUTH_WINDOW_MS} milliseconds`;
+    await pool.query("delete from auth_tentativas where ts < now() - $1::interval", [janela]);
+    const { rows } = await pool.query(
+      "select count(*)::int as n from auth_tentativas where ip = $1 and ts >= now() - $2::interval",
+      [ip, janela],
+    );
+    if (rows[0].n >= AUTH_MAX_TRIES) throw new HttpError(429, "muitas tentativas; aguarde alguns minutos");
+    await pool.query("insert into auth_tentativas (ip) values ($1)", [ip]);
   }
+
 
   function userFromAuth(req) {
     const h = req.headers.authorization || "";
@@ -75,7 +80,7 @@ export function createHandler({ pool, jwtSecret }) {
   const publicUser = (row) => ({ id: row.id, email: row.email, name: row.name });
 
   async function signup(body, ip) {
-    limitAuth(ip);
+    await limitAuth(ip);
     const email = String(body.email || "").trim().toLowerCase();
     const name = String(body.name || "").trim().slice(0, 80);
     const password = String(body.password || "");
@@ -95,7 +100,7 @@ export function createHandler({ pool, jwtSecret }) {
   }
 
   async function login(body, ip) {
-    limitAuth(ip);
+    await limitAuth(ip);
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
     const { rows } = await pool.query("select id, email, name, password_hash from users where email = $1", [email]);
@@ -127,13 +132,14 @@ export function createHandler({ pool, jwtSecret }) {
 
   async function route(req, res, url, origin) {
     const path = url.pathname;
-    const ip = req.socket.remoteAddress || "";
+    // na Vercel a conexão vem do proxy; o IP do cliente é o primeiro do x-forwarded-for
+    const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress || "";
 
     if (req.method === "POST" && path === "/auth/signup") return send(res, origin, 201, await signup(JSON.parse(await readBody(req) || "{}"), ip));
     if (req.method === "POST" && path === "/auth/login") return send(res, origin, 200, await login(JSON.parse(await readBody(req) || "{}"), ip));
     if (req.method === "DELETE" && path === "/auth/me") {
       // Exclusão definitiva: confirma com a senha e apaga a conta com todos os dados (cascade).
-      limitAuth(ip);
+      await limitAuth(ip);
       const u = userFromAuth(req);
       const corpo = JSON.parse((await readBody(req)) || "{}");
       const { rows } = await pool.query("select password_hash from users where id = $1", [u.id]);

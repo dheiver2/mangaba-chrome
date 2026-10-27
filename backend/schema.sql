@@ -15,3 +15,10 @@ create table if not exists user_data (
   updated_at timestamptz not null default now(),
   primary key (user_id, kind)
 );
+
+-- Tentativas de login/cadastro por IP, para o limite valer entre instâncias serverless.
+create table if not exists auth_tentativas (
+  ip text not null,
+  ts timestamptz not null default now()
+);
+create index if not exists auth_tentativas_ip_ts on auth_tentativas (ip, ts);
