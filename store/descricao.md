@@ -5,7 +5,7 @@
 **Resumo curto (até 132 caracteres):**
 Assistente brasileira no navegador: lê, preenche e clica nas páginas que você está vendo, a seu pedido.
 
-**Descrição:**
+**Descrição** (cole só o texto entre as linhas; o mesmo texto está em descricao-para-colar.txt):
 
 O Mangaba AI é um assistente que trabalha na página que você está vendo. Você descreve a tarefa no painel lateral, e o agente lê a página, preenche formulários, navega entre páginas, clica em botões e confirma o resultado antes de responder.
 
@@ -32,5 +32,3 @@ Detalhes na política de privacidade.
 **Categoria:** Produtividade
 
 **Idioma principal:** Português (Brasil)
-
-**Palavras-chave sugeridas:** assistente, agente, automação, formulário, produtividade, IA brasileira
