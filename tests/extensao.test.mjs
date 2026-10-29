@@ -108,3 +108,19 @@ test("Meus dados: o valor vai à página, o modelo só vê o marcador", async ()
   assert.match(ctx.contextoDosDados(), /\{\{email\}\}, \{\{nome\}\}/);
   assert.doesNotMatch(ctx.contextoDosDados(), /ana@exemplo/);
 });
+
+test("Ler a página aberta: o texto da aba vai junto, sem os valores de Meus dados", async () => {
+  const ctx = carregarHermes({ tool: async (t) => (t === "ler" ? { ok: true, out: "Olá ana@exemplo.com, seu pedido 42 saiu." } : { ok: false }) });
+  ctx.cfg.dados = "email: ana@exemplo.com";
+  const texto = await ctx.textoDaAba();
+  assert.match(texto, /pedido 42/);
+  assert.match(texto, /\{\{email\}\}/);
+  assert.doesNotMatch(texto, /ana@exemplo/);
+  ctx.cfg.lerPagina = false;
+  assert.equal(await ctx.textoDaAba(), "");
+});
+
+test("Ler a página aberta: página que não dá para ler não atrapalha o pedido", async () => {
+  const ctx = carregarHermes({ tool: async () => ({ ok: false, error: "Página não acessível" }) });
+  assert.equal(await ctx.textoDaAba(), "");
+});

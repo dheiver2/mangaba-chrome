@@ -17,6 +17,7 @@ const DEFAULTS = {
   hermesUrl: "https://hermes.mangaba.ia.br", // agente: Hermes; o modelo que raciocina é o Mangaba Router
   key: "",
   dados: "",
+  lerPagina: true, // manda o texto da aba aberta junto com o pedido
 };
 let cfg = { ...DEFAULTS };
 
@@ -24,7 +25,12 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   cfg = saved;
   $("cfgKey").value = cfg.key;
   $("cfgDados").value = cfg.dados || "";
+  $("ctxPagina").checked = cfg.lerPagina !== false;
 });
+$("ctxPagina").onchange = () => {
+  cfg.lerPagina = $("ctxPagina").checked;
+  if (chrome.storage?.sync) chrome.storage.sync.set({ lerPagina: cfg.lerPagina });
+};
 
 // Carregar histórico ao iniciar
 (async () => {

@@ -67,6 +67,15 @@ async function contextoDaAba() {
   return `\n\n[aba atual: ${r.page.title} — ${r.page.url}]\nTrabalhe nesta aba, a que o usuário está vendo, a não ser que ele peça outra.`;
 }
 
+// Com "Ler a página aberta" ligado, o texto da aba vai junto com o pedido: o agente já começa
+// sabendo o que o usuário está vendo, sem precisar decidir ler primeiro.
+async function textoDaAba() {
+  if (cfg.lerPagina === false) return "";
+  const r = await tool("ler", {}).catch(() => null);
+  if (!r?.ok || !r.out?.trim()) return "";
+  return esconderValores(`\n\n[conteúdo da aba atual, já lido pela extensão]\n${r.out}\n[fim do conteúdo da aba]`, meusDados());
+}
+
 // "Meus dados": o modelo só conhece os nomes ({{email}}); o valor entra direto na página.
 function meusDados() {
   const dados = {};
@@ -131,13 +140,16 @@ async function runHermes(task) {
     return;
   }
   try {
+    if (cfg.lerPagina !== false) status.textContent = "Lendo a página...";
+    const pagina = await textoDaAba();
+    status.textContent = "Hermes pensando...";
     const inst = await hermesInstalacao();
     const cabecalhos = { "Content-Type": "application/json", Authorization: "Bearer " + inst.chave };
     // a chave do Mangaba Router é do usuário: vai em cada turno e a ponte só a usa enquanto ele dura
     const fluxo = await fetch(hermesBase() + "/v1/chat/completions", {
       method: "POST",
       headers: { ...cabecalhos, "X-Mangaba-Key": cfg.key || "" },
-      body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task + (await contextoDaAba()) + contextoDosDados() }], stream: true }),
+      body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task + (await contextoDaAba()) + pagina + contextoDosDados() }], stream: true }),
       signal: agentRun.abort.signal,
     });
     if (!fluxo.ok) throw new Error(`Hermes respondeu ${fluxo.status}`);
