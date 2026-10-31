@@ -15,21 +15,27 @@ chrome.windows.getCurrent().then((w) => { myWindowId = w.id; }).catch(() => {});
 
 const DEFAULTS = {
   hermesUrl: "https://hermes.mangaba.ia.br", // agente: Hermes; o modelo que raciocina é o Mangaba Router
-  key: "",
   dados: "",
   lerPagina: true, // manda o texto da aba aberta junto com o pedido
 };
-let cfg = { ...DEFAULTS };
+// cfg.key (chave do Router) só existe em memória: vem de chaveLoad() por usuário (acesso.js)
+let cfg = { ...DEFAULTS, key: "" };
+
+// grava as preferências no storage.sync sem a chave, que é local e por usuário
+function salvarCfgSync() {
+  if (!chrome.storage?.sync) return;
+  const { key, ...semChave } = cfg;
+  chrome.storage.sync.set(semChave);
+}
 
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
-  cfg = saved;
-  $("cfgKey").value = cfg.key;
+  cfg = { ...saved, key: cfg.key };
   $("cfgDados").value = cfg.dados || "";
   $("ctxPagina").checked = cfg.lerPagina !== false;
 });
 $("ctxPagina").onchange = () => {
   cfg.lerPagina = $("ctxPagina").checked;
-  if (chrome.storage?.sync) chrome.storage.sync.set({ lerPagina: cfg.lerPagina });
+  salvarCfgSync();
 };
 
 // Carregar histórico ao iniciar
@@ -74,11 +80,10 @@ document.addEventListener("keydown", (e) => {
   }
 });
 $("btnSave").onclick = () => {
-  cfg = { ...cfg, key: $("cfgKey").value.trim(), dados: $("cfgDados").value.trim() };
-  if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
+  cfg = { ...cfg, dados: $("cfgDados").value.trim() };
+  salvarCfgSync();
   $("settings").classList.add("hidden");
   if (account) syncPush(account).catch(() => {});
-
 };
 
 // ---------- renderização Markdown (sem dependências, HTML sempre escapado) ----------
@@ -308,6 +313,8 @@ function respostaSocial(q) {
 }
 
 async function send() {
+  // sem sessão ou sem chave o chat nem aparece; isto cobre atalhos de teclado e corridas
+  if (estadoAcesso(account, cfg.key) !== "pronto") { render(); return; }
   const question = input.value.trim();
   if (!question) return;
 
@@ -343,57 +350,157 @@ input.addEventListener("keydown", (e) => {
 function autoGrow() { input.style.height = "auto"; input.style.height = Math.min(120, input.scrollHeight) + "px"; }
 input.addEventListener("input", autoGrow);
 
-// ---- Conta: entrar, criar conta, sair e sincronização ----
+// ---- Acesso: conta obrigatória + chave do Mangaba Router (acesso.js) ----
+// Sem sessão → tela de entrada; sessão sem chave → tela da chave; as duas → chat.
 let account = null;
-const statusConta = (msg) => { $("contaStatus").textContent = msg; };
-const mostraConta = () => {
-  statusConta(account
-    ? "Conectado como " + (account.user.name || account.user.email) + " — dados sincronizados com " + account.apiUrl
-    : "Não conectado — o histórico fica só neste navegador.");
-};
-async function contaEntrar(criar) {
-  const apiUrl = ACCOUNT_DEFAULT_URL;
+let modoCriar = false;
+
+function render() {
+  const estado = estadoAcesso(account, cfg.key);
+  $("telaEntrada").classList.toggle("hidden", estado !== "entrada");
+  $("telaChave").classList.toggle("hidden", estado !== "chave");
+  for (const id of ["chat", "rodapeChat", "btnSettings", "usuarioTopo"]) $(id).classList.toggle("hidden", estado !== "pronto");
+  if (estado !== "pronto") $("settings").classList.add("hidden");
+  const nome = account ? account.user.name || account.user.email : "";
+  $("usuarioTopo").textContent = account ? account.user.email : "";
+  $("contaStatus").textContent = account ? "Conectado como " + nome + ". Histórico e memória sincronizados com a conta." : "";
+  if (estado === "entrada") $(modoCriar ? "entNome" : "entEmail").focus();
+  else if (estado === "chave") $("chaveInput").focus();
+  return estado;
+}
+
+function setModoEntrada(criar) {
+  modoCriar = criar;
+  $("abaEntrar").classList.toggle("ativa", !criar);
+  $("abaCriar").classList.toggle("ativa", criar);
+  $("rotuloNome").classList.toggle("hidden", !criar);
+  $("entSenha").autocomplete = criar ? "new-password" : "current-password";
+  $("btnEntrada").textContent = criar ? "Criar conta" : "Entrar";
+  $("entErro").textContent = "";
+  $(criar ? "entNome" : "entEmail").focus();
+}
+$("abaEntrar").onclick = () => setModoEntrada(false);
+$("abaCriar").onclick = () => setModoEntrada(true);
+
+// Depois do login: carrega a chave do usuário (ou migra a da 2.16.0) e sincroniza.
+async function entrouNaConta() {
+  const id = account.user.id;
+  cfg.key = (await chaveLoad(id)) || (await chaveMigrar(id));
+  render();
   try {
-    statusConta(criar ? "Criando conta…" : "Entrando…");
-    account = criar
-      ? await accountSignUp(apiUrl, $("contaNome").value.trim(), $("contaEmail").value.trim(), $("contaSenha").value)
-      : await accountSignIn(apiUrl, $("contaEmail").value.trim(), $("contaSenha").value);
-    $("contaSenha").value = "";
     await syncPull(account, { includeSettings: true });
     await syncPush(account);
-    mostraConta();
-  } catch (e) {
-    statusConta("Erro: " + e.message);
-  }
+    $("cfgDados").value = cfg.dados || "";
+    $("ctxPagina").checked = cfg.lerPagina !== false;
+  } catch { /* sincronização falhou: o uso local continua */ }
 }
-$("btnEntrar").onclick = () => contaEntrar(false);
-$("btnCriarConta").onclick = () => contaEntrar(true);
-$("btnExcluirConta").onclick = async () => {
-  if (!account) return statusConta("Entre na conta antes de excluí-la.");
-  const senha = $("contaSenha").value;
-  if (!senha) return statusConta("Digite a senha no campo acima para confirmar a exclusão.");
-  if (!confirm("Excluir a conta e todos os dados sincronizados? Essa ação não pode ser desfeita.")) return;
+
+$("formEntrada").onsubmit = async (e) => {
+  e.preventDefault();
+  const nome = $("entNome").value.trim();
+  const email = $("entEmail").value.trim();
+  const senha = $("entSenha").value;
+  const erro = $("entErro");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erro.textContent = "Digite um e-mail válido."; return; }
+  if (senha.length < 8) { erro.textContent = "A senha precisa ter pelo menos 8 caracteres."; return; }
+  const btn = $("btnEntrada");
+  btn.disabled = true;
+  btn.textContent = modoCriar ? "Criando conta…" : "Entrando…";
+  erro.textContent = "";
   try {
-    statusConta("Excluindo conta…");
-    await accountDelete(account, senha);
-    await hermesApagar();
-    $("contaSenha").value = "";
-    account = null;
-    mostraConta();
-    statusConta("Conta excluída. Os dados guardados neste navegador continuam aqui até você limpá-los.");
-  } catch (e) {
-    statusConta("Erro: " + e.message);
+    account = modoCriar
+      ? await accountSignUp(ACCOUNT_DEFAULT_URL, nome, email, senha)
+      : await accountSignIn(ACCOUNT_DEFAULT_URL, email, senha);
+    $("entSenha").value = "";
+    await entrouNaConta();
+  } catch (err) {
+    erro.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = modoCriar ? "Criar conta" : "Entrar";
   }
 };
-$("btnSair").onclick = async () => {
+
+$("formChave").onsubmit = async (e) => {
+  e.preventDefault();
+  if (!account) return render();
+  const chave = $("chaveInput").value.trim();
+  const btn = $("btnValidarChave");
+  btn.disabled = true;
+  btn.textContent = "Validando…";
+  $("chaveErro").textContent = "";
+  try {
+    const v = await validarChaveRouter(chave);
+    if (!v.ok) { $("chaveErro").textContent = v.erro; return; }
+    await chaveSave(account.user.id, chave);
+    cfg.key = chave;
+    $("chaveInput").value = "";
+    render();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Validar e continuar";
+  }
+};
+
+// Chamado pelo hermes.js quando o Router recusa a chave no meio de uma tarefa.
+function chaveRouterRecusada(msg) {
+  cfg.key = ""; // a guardada fica até uma nova ser validada
+  render();
+  $("chaveErro").textContent = "O Mangaba Router recusou a sua chave" + (msg ? " (" + msg + ")" : "") + ". Cole uma chave válida.";
+}
+
+$("btnTrocarChave").onclick = () => {
+  cfg.key = "";
+  render();
+};
+
+async function sair() {
+  if (agentRun) { agentRun.cancel = true; agentRun.abort?.abort(); }
   await accountSignOut();
   account = null;
-  mostraConta();
+  cfg.key = "";
+  setModoEntrada(false);
+  render();
+}
+$("btnSair").onclick = sair;
+$("btnSairChave").onclick = sair;
+
+$("btnExcluirConta").onclick = async () => {
+  if (!account) return render();
+  const senha = $("contaSenha").value;
+  if (!senha) { $("contaStatus").textContent = "Digite a senha para confirmar a exclusão."; return; }
+  if (!confirm("Excluir a conta e todos os dados sincronizados? Essa ação não pode ser desfeita.")) return;
+  try {
+    $("contaStatus").textContent = "Excluindo conta…";
+    const id = account.user.id;
+    await accountDelete(account, senha);
+    await hermesApagar();
+    await chaveRemove(id);
+    $("contaSenha").value = "";
+    account = null;
+    cfg.key = "";
+    render();
+    $("entErro").textContent = "Conta excluída. O histórico deste navegador continua aqui até você limpá-lo.";
+  } catch (e) {
+    $("contaStatus").textContent = "Erro: " + e.message;
+  }
 };
+
 // Histórico e memória sobem a cada minuto enquanto a conta estiver conectada.
 setInterval(() => { if (account) syncPush(account, { recordsOnly: true }).catch(() => {}); }, 60000);
-accountLoad().then((saved) => {
-  account = saved;
-  mostraConta();
-  if (account) syncPull(account).catch(() => {});
-});
+
+// Boot: confere a sessão salva antes de liberar qualquer tela.
+(async () => {
+  account = await accountLoad();
+  if (account) {
+    if ((await confirmarSessao(account)) === "expirada") {
+      await accountSignOut();
+      account = null;
+      $("entErro").textContent = "Sua sessão expirou. Entre de novo.";
+    } else {
+      cfg.key = (await chaveLoad(account.user.id)) || (await chaveMigrar(account.user.id));
+      syncPull(account).catch(() => {});
+    }
+  }
+  render();
+})();

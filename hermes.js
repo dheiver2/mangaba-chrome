@@ -122,6 +122,8 @@ async function executarAcaoHermes(acao) {
   return esconderValores(r.ok ? String(r.out ?? "ok") : "erro: " + (r.error || "falhou"), dados);
 }
 
+const erroHermes = (msg, chaveRecusada) => Object.assign(new Error(msg), { chaveRecusada });
+
 // Executa uma tarefa pelo Hermes. Retorna quando o stream termina.
 async function runHermes(task) {
   agentRun = { cancel: false, waiting: null, abort: new AbortController() };
@@ -134,7 +136,7 @@ async function runHermes(task) {
   let texto = "";
   if (!cfg.key) {
     status.textContent = "Sem chave";
-    addMsg("err", "Informe sua chave do Mangaba Router em ⚙️ Configurações.");
+    addMsg("err", "Conecte sua chave do Mangaba Router para continuar.");
     agentRun = null;
     setStop(false);
     return;
@@ -152,7 +154,10 @@ async function runHermes(task) {
       body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task + (await contextoDaAba()) + pagina + contextoDosDados() }], stream: true }),
       signal: agentRun.abort.signal,
     });
-    if (!fluxo.ok) throw new Error(`Hermes respondeu ${fluxo.status}`);
+    if (!fluxo.ok) {
+      const corpo = await fluxo.json().catch(() => ({}));
+      throw erroHermes(corpo.erro || `Hermes respondeu ${fluxo.status}`, fluxo.status === 401 && /Mangaba Router/.test(corpo.erro || ""));
+    }
 
     for await (const quadro of lerSSEHermes(fluxo.body)) {
       if (quadro.evento === "navegador.acao") {
@@ -166,7 +171,10 @@ async function runHermes(task) {
         });
         continue;
       }
-      if (quadro.evento === "erro") throw new Error(JSON.parse(quadro.dados).erro);
+      if (quadro.evento === "erro") {
+        const erro = JSON.parse(quadro.dados).erro || "";
+        throw erroHermes(erro, /^chave do Mangaba Router recusada/.test(erro));
+      }
       if (quadro.dados === "[DONE]") break;
       try {
         const pedaco = JSON.parse(quadro.dados).choices?.[0]?.delta?.content;
@@ -177,6 +185,8 @@ async function runHermes(task) {
   } catch (e) {
     status.textContent = "Erro (Hermes)";
     if (e.name !== "AbortError") addMsg("err", "Hermes: " + e.message);
+    // a ponte avisa quando o Router recusou a chave: volta para a tela da chave
+    if (e.chaveRecusada && typeof chaveRouterRecusada === "function") chaveRouterRecusada(e.message);
   } finally {
     agentRun = null;
     setStop(false);

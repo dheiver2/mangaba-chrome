@@ -124,3 +124,84 @@ test("Ler a página aberta: página que não dá para ler não atrapalha o pedid
   const ctx = carregarHermes({ tool: async () => ({ ok: false, error: "Página não acessível" }) });
   assert.equal(await ctx.textoDaAba(), "");
 });
+
+// ---- Acesso: conta obrigatória + chave do Router (acesso.js) ----
+function carregarAcesso({ fetch, local = {}, sync = {} } = {}) {
+  const storage = {
+    local: {
+      get: async (padrao) => Object.fromEntries(Object.entries(padrao).map(([k, v]) => [k, k in local ? local[k] : v])),
+      set: async (o) => Object.assign(local, o),
+      remove: async (k) => { delete local[k]; },
+    },
+    sync: {
+      get: (padrao, cb) => cb(Object.fromEntries(Object.entries(padrao).map(([k, v]) => [k, k in sync ? sync[k] : v]))),
+      remove: (k, cb) => { delete sync[k]; cb(); },
+    },
+  };
+  const ctx = vm.createContext({ fetch, chrome: { storage } });
+  vm.runInContext(ler("acesso.js"), ctx);
+  return { ctx, local, sync };
+}
+const conta = { apiUrl: "https://conta.exemplo", token: "jwt", user: { id: "u1", email: "ana@exemplo.com" } };
+
+test("estadoAcesso: sem sessão → entrada; sem chave → chave; as duas → pronto", () => {
+  const { ctx } = carregarAcesso();
+  assert.equal(ctx.estadoAcesso(null, "mr-1"), "entrada");
+  assert.equal(ctx.estadoAcesso({ token: "jwt", user: {} }, "mr-1"), "entrada");
+  assert.equal(ctx.estadoAcesso(conta, ""), "chave");
+  assert.equal(ctx.estadoAcesso(conta, "mr-1"), "pronto");
+});
+
+test("chave fica separada por usuário em storage.local", async () => {
+  const { ctx, local } = carregarAcesso();
+  await ctx.chaveSave("u1", "mr-ana");
+  assert.equal(await ctx.chaveLoad("u1"), "mr-ana");
+  assert.equal(await ctx.chaveLoad("u2"), "");
+  await ctx.chaveRemove("u1");
+  assert.equal(local.mangaba_chave_u1, undefined);
+});
+
+test("chave da 2.16.0 (storage.sync) migra para o primeiro usuário e sai do sync", async () => {
+  const { ctx, local, sync } = carregarAcesso({ sync: { key: "mr-antiga" } });
+  assert.equal(await ctx.chaveMigrar("u1"), "mr-antiga");
+  assert.equal(local.mangaba_chave_u1, "mr-antiga");
+  assert.equal(sync.key, undefined);
+  assert.equal(await ctx.chaveMigrar("u2"), "");
+});
+
+test("validarChaveRouter: 200 aceita, 401 recusa, falha de rede pede nova tentativa", async () => {
+  let pedido;
+  const resposta = (status) => async (url, opts) => { pedido = { url, opts }; return { ok: status === 200, status }; };
+  assert.equal((await carregarAcesso({ fetch: resposta(200) }).ctx.validarChaveRouter(" mr-boa ")).ok, true);
+  assert.equal(pedido.url, "https://mangabarouter.store/v1/models");
+  assert.equal(pedido.opts.headers.Authorization, "Bearer mr-boa");
+  const ruim = await carregarAcesso({ fetch: resposta(401) }).ctx.validarChaveRouter("mr-ruim");
+  assert.equal(ruim.motivo, "invalida");
+  const offline = await carregarAcesso({ fetch: async () => { throw new TypeError("rede"); } }).ctx.validarChaveRouter("mr-x");
+  assert.equal(offline.motivo, "rede");
+  assert.equal((await carregarAcesso().ctx.validarChaveRouter("  ")).motivo, "invalida");
+});
+
+test("confirmarSessao: 401 expira, rede fora mantém a sessão local", async () => {
+  const com = (f) => carregarAcesso({ fetch: f }).ctx;
+  assert.equal(await com(async () => ({ ok: true, status: 200 })).confirmarSessao(conta), "ok");
+  assert.equal(await com(async () => ({ ok: false, status: 401 })).confirmarSessao(conta), "expirada");
+  assert.equal(await com(async () => { throw new TypeError("rede"); }).confirmarSessao(conta), "offline");
+  assert.equal(await com(async () => ({ ok: true })).confirmarSessao(null), "expirada");
+});
+
+test("Hermes: chave recusada pelo Router volta para a tela da chave", async () => {
+  const chamadas = [];
+  const corpo = corpoSSE('event: erro\ndata: {"erro":"chave do Mangaba Router recusada: revogada"}\n\n');
+  const ctx = carregarHermes({
+    addMsg: () => ({}), setAssistant: () => {}, setStop: () => {}, agentRun: null,
+    chat: { appendChild: () => {} }, document: { createElement: () => ({}) },
+    tool: async () => ({ ok: false }),
+    fetch: async (url) => (url.endsWith("/instalacao") ? { ok: true, json: async () => ({ instalacao: "i", chave: "c" }) } : { ok: true, body: corpo }),
+    AbortController, chaveRouterRecusada: (m) => chamadas.push(m),
+  });
+  ctx.cfg.lerPagina = false;
+  await ctx.runHermes("resuma");
+  assert.equal(chamadas.length, 1);
+  assert.match(chamadas[0], /recusada/);
+});

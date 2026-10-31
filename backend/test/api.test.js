@@ -111,6 +111,12 @@ test("CORS libera a extensão e não libera origens quaisquer", async () => {
   assert.equal(outra.headers.get("access-control-allow-origin"), null);
 });
 
+test("CORS: o preflight libera DELETE para a exclusão de conta", async () => {
+  const r = await call("OPTIONS", "/auth/me", { origin: "chrome-extension://abcdefghijklmnop" });
+  assert.equal(r.status, 204);
+  assert.match(r.headers.get("access-control-allow-methods"), /DELETE/);
+});
+
 test("exclusão de conta: exige a senha e apaga a conta e os dados", async () => {
   const email = unique();
   const s = await call("POST", "/auth/signup", { body: { email, password: "senha-forte-123" } });

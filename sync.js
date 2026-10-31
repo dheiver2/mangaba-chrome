@@ -84,8 +84,9 @@ async function syncPull(account, { includeSettings = false } = {}) {
   if (includeSettings) {
     const { payload } = await get("settings");
     if (payload) {
-      cfg = { ...DEFAULTS, ...payload, key: cfg.key }; // a API key continua local
-      if (chrome.storage?.sync) chrome.storage.sync.set(cfg);
+      const { key, ...semChave } = payload; // configurações antigas podem ter trazido a chave
+      cfg = { ...DEFAULTS, ...semChave, key: cfg.key }; // a chave continua local e por usuário
+      salvarCfgSync();
     }
   }
   for (const [kind, store] of [["chat", "chat_history"], ["agent", "agent_history"], ["memory", "memory"]]) {

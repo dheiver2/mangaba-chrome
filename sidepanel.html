@@ -8,8 +8,45 @@
 <body>
 <header>
   <div class="logo"><img src="icons/mark.png" alt="mangaba.ai"> <span>mangaba<b>.ai</b></span></div>
-  <button id="btnSettings" title="Configurações">⚙</button>
+  <span id="usuarioTopo" class="usuario-topo hidden"></span>
+  <button id="btnSettings" class="hidden" title="Configurações">⚙</button>
 </header>
+
+<section id="telaEntrada" class="tela hidden">
+  <h2>Entre na sua conta Mangaba</h2>
+  <p class="tela-sub">Para usar o agente, entre ou crie uma conta. Seu histórico e sua memória ficam salvos nela.</p>
+  <div class="abas" role="tablist">
+    <button id="abaEntrar" class="aba ativa" type="button" role="tab">Entrar</button>
+    <button id="abaCriar" class="aba" type="button" role="tab">Criar conta</button>
+  </div>
+  <form id="formEntrada" novalidate>
+    <label id="rotuloNome" class="hidden">Nome
+      <input id="entNome" autocomplete="name" placeholder="seu nome">
+    </label>
+    <label>E-mail
+      <input id="entEmail" type="email" autocomplete="email" placeholder="voce@exemplo.com" required>
+    </label>
+    <label>Senha
+      <input id="entSenha" type="password" autocomplete="current-password" placeholder="mínimo 8 caracteres" required>
+    </label>
+    <div id="entErro" class="tela-erro" role="alert"></div>
+    <button id="btnEntrada" class="tela-btn" type="submit">Entrar</button>
+  </form>
+</section>
+
+<section id="telaChave" class="tela hidden">
+  <h2>Conecte sua chave do Mangaba Router</h2>
+  <p class="tela-sub">O agente usa a sua chave para chamar os modelos. Ela fica só neste navegador, ligada à sua conta.</p>
+  <form id="formChave" novalidate>
+    <label>Chave do Mangaba Router
+      <input id="chaveInput" type="password" autocomplete="off" placeholder="mr-..." required>
+    </label>
+    <div id="chaveErro" class="tela-erro" role="alert"></div>
+    <button id="btnValidarChave" class="tela-btn" type="submit">Validar e continuar</button>
+  </form>
+  <p class="tela-sub">Não tem chave? <a id="linkCriarChave" href="https://mangabarouter.store/console" target="_blank" rel="noopener">Crie no console do Mangaba Router ↗</a></p>
+  <button id="btnSairChave" class="tela-link" type="button">Entrar com outra conta</button>
+</section>
 
 <div id="pauseLogin" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999;">
   <div style="background: white; border-radius: 8px; padding: 24px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
@@ -21,28 +58,19 @@
 
 <div id="settings" class="hidden">
   <div id="grpConta" style="border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:10px">
-    <strong>Conta e sincronização</strong>
-    <div id="contaStatus" style="font-size:12px;color:#555;margin:4px 0">Não conectado — o histórico fica só neste navegador.</div>
-    <label>Nome (só para criar conta)
-      <input id="contaNome" placeholder="seu nome">
-    </label>
-    <label>E-mail
-      <input id="contaEmail" type="email" placeholder="voce@exemplo.com">
-    </label>
-    <label>Senha (mínimo 8 caracteres)
-      <input id="contaSenha" type="password">
-    </label>
+    <strong>Conta</strong>
+    <div id="contaStatus" style="font-size:12px;color:#555;margin:4px 0"></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <button id="btnEntrar" type="button">Entrar</button>
-      <button id="btnCriarConta" type="button">Criar conta</button>
+      <button id="btnTrocarChave" type="button">Trocar chave do Router</button>
       <button id="btnSair" type="button">Sair</button>
-      <button id="btnExcluirConta" type="button">Excluir conta</button>
     </div>
-  </div>
-  <div id="grpGateway">
-    <label>Sua chave do Mangaba Router
-      <input id="cfgKey" type="password" placeholder="mr-...">
-    </label>
+    <details style="margin-top:8px">
+      <summary style="font-size:12px;cursor:pointer">Excluir conta</summary>
+      <label>Senha para confirmar
+        <input id="contaSenha" type="password" autocomplete="current-password">
+      </label>
+      <button id="btnExcluirConta" type="button">Excluir conta e dados sincronizados</button>
+    </details>
   </div>
   <hr>
   <label>Meus dados (chave: valor, um por linha). O agente só vê os nomes, como {{email}}; o valor é posto direto na página e nunca vai ao modelo
@@ -52,13 +80,13 @@
   <button id="btnSave">Salvar</button>
 </div>
 
-<main id="chat">
+<main id="chat" class="hidden">
   <div class="arow"><img class="avatar" src="icons/mark.png" alt="">
     <div class="msg assistant"><p>Olá! Sou a <b>Mangaba</b>. Peça uma tarefa (ex.: <i>"resuma esta página"</i>, <i>"comente no primeiro vídeo"</i>) que eu controlo o navegador para você.</p></div>
   </div>
 </main>
 
-<footer>
+<footer id="rodapeChat" class="hidden">
   <div class="ctxrow">
     <label class="ctx" title="O texto da aba aberta vai junto com cada pedido"><input type="checkbox" id="ctxPagina" checked> 📄 Ler a página aberta</label>
   </div>
@@ -71,6 +99,7 @@
 
 <script src="db.js"></script>
 <script src="sync.js"></script>
+<script src="acesso.js"></script>
 <script src="hermes.js"></script>
 <script src="sidepanel.js"></script>
 </body>
