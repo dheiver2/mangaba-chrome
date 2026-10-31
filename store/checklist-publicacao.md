@@ -2,7 +2,7 @@
 
 ## Antes de enviar
 - [ ] Conta de desenvolvedor criada (taxa única de US$ 5), no nome de quem responde pela extensão.
-- [ ] Zip de produção gerado (`bash build.sh prod`) e testado com o `dist/` carregado no Chrome.
+- [x] Zip de produção gerado (`bash build.sh prod`) e testado com o `dist/` carregado no Chrome: `store/mangaba-chrome-2.17.0.zip` é o arquivo a enviar.
 - [ ] Versão no `manifest.json` maior que a publicada anteriormente.
 - [ ] Ícones 16, 48 e 128 px no pacote (já existem em `icons/`).
 - [ ] Pelo menos 1 captura de tela de 1280×800 (ou 640×400) mostrando o painel em uso.
