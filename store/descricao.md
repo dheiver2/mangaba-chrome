@@ -19,8 +19,8 @@ O que ele faz:
 
 Como funciona:
 - O raciocínio do agente roda em servidores da Mangaba, no Brasil. A extensão envia a tarefa e o conteúdo da página necessário para ela.
-- Você usa a sua própria chave do Mangaba Router, colocada nas configurações da extensão.
-- Com uma conta, o histórico e a memória podem ser sincronizados entre os seus navegadores.
+- Para usar, você entra com uma conta Mangaba e conecta a sua própria chave do Mangaba Router. A chave é conferida no Router e fica só neste navegador, ligada à sua conta.
+- O histórico e a memória ficam na sua conta e são sincronizados entre os seus navegadores.
 
 Privacidade e controle:
 - A extensão não guarda senhas nem cartões. Quando uma página pede login, o agente para e pede que você entre.

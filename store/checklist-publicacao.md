@@ -16,7 +16,8 @@
 - [ ] Informar essa URL no campo "Privacy policy" da loja.
 
 ## Pendências técnicas que a revisão pode cobrar
-- [ ] **Exclusão de conta:** a API ainda não tem `DELETE` para a conta. A política promete o botão no painel, então a rota e o botão precisam existir antes de publicar.
+- [x] **Exclusão de conta:** `DELETE /auth/me` com senha e botão em ⚙︎ → Excluir conta (CORS liberado na 2.17.0).
+- [ ] **Conta de teste para o revisor:** desde a 2.17.0 a conta é obrigatória. Criar uma conta e uma chave do Router com cota baixa e informar no campo de instruções de teste da loja; sem isso a revisão recusa.
 - [ ] **Texto de LEGAL.md:** diz "sem coleta de dados pessoal sem consentimento" e não cita conta nem sincronização. Atualizar para bater com a política.
 - [ ] **Licença:** o LEGAL.md é proprietário. A Chrome Web Store aceita, mas a loja mostra o texto de licença ao instalar; confirme que é isso que você quer.
 - [ ] **Limite de dados enviados:** confirmar que o painel avisa, antes da primeira tarefa, que o conteúdo da página vai ao servidor do agente.

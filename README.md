@@ -15,6 +15,13 @@ Autonomous browser agent in Chrome's side panel, connected to the **Mangaba Gate
 ## Agent mode
 Just type a task and send. Flow: a planner generates a short plan → the Orchestrator (or the agent picked from the dropdown) executes it in JSON steps with a live status and a collapsible step list. Tools: navigate, new_tab, back, click, type, key, scroll, read (with offset), wait, ask (the user), and done. Safety: password fields are blocked; sensitive clicks/fills (buy, pay, delete, card, SSN...) require your confirmation; the ■ button stops the task at any time.
 
+## Access (since 2.17.0)
+The panel only opens the chat after two steps:
+1. **Sign in or create a Mangaba account** (required; history and memory sync with it).
+2. **Connect your Mangaba Router key** (`mr-...`). It is checked against the Router's `/v1/models` and stored only in this browser (`chrome.storage.local`, per account). Get one at the [Mangaba Router console](https://mangabarouter.store/console).
+
+Users coming from 2.16.0 keep their key: it moves to the first account that signs in on that browser.
+
 ## Installation
 1. Open `chrome://extensions`
 2. Turn on **Developer mode**

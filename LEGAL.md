@@ -39,7 +39,8 @@ Você **NÃO pode**:
 - ✅ LGPD (Lei Geral de Proteção de Dados)
 - ✅ GDPR (General Data Protection Regulation)
 - ✅ Dados pessoais tratados conforme a política de privacidade (`store/politica-de-privacidade.md`)
-- ✅ Conta opcional (e-mail, nome e senha em hash bcrypt); sincronização de histórico e memória só para quem tem conta
+- ✅ Conta obrigatória desde a 2.17.0 (e-mail, nome e senha em hash bcrypt); histórico e memória sincronizados com a conta
+- ✅ Chave do Mangaba Router só no armazenamento local da extensão, separada por conta
 - ✅ Conteúdo da página é enviado ao servidor do agente apenas em uma tarefa pedida pelo usuário
 - ✅ Exclusão de conta disponível no painel (`DELETE /auth/me`, com senha)
 

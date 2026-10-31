@@ -1,17 +1,17 @@
 # Política de Privacidade — Mangaba AI
 
-**Última atualização:** 26 de outubro de 2026
+**Última atualização:** 31 de outubro de 2026
 **Responsável:** Dheiver Santos — contato: dheiver.santos@mangaba.ia.br
 
 Esta política explica quais dados a extensão Mangaba AI trata, para quê, com quem compartilha e como você controla isso. Ela segue a LGPD.
 
 ## 1. Dados que tratamos
 
-**a) Conta (opcional).** Ao criar uma conta: nome, e-mail e senha. A senha é guardada apenas como hash (bcrypt). Não temos acesso à senha em texto.
+**a) Conta (obrigatória para usar a extensão).** Ao criar uma conta: nome, e-mail e senha. A senha é guardada apenas como hash (bcrypt). Não temos acesso à senha em texto.
 
-**b) Configurações.** Modelo escolhido, temperatura, número de passos e preferências. A sua chave do Mangaba Router fica só no seu navegador (armazenamento da extensão). Ela não é sincronizada com a conta.
+**b) Configurações.** Modelo escolhido, temperatura, número de passos e preferências. A sua chave do Mangaba Router fica só no seu navegador (armazenamento local da extensão), separada por conta. Ela não é sincronizada com a conta nem pela conta Google do Chrome. Ao conectá-la, a extensão a envia ao Mangaba Router apenas para conferir se é válida.
 
-**c) Histórico e memória (se você tiver conta).** As últimas 100 mensagens do chat, o histórico de tarefas do agente e os fatos que você pedir para lembrar. Sem conta, esses dados ficam só no seu navegador.
+**c) Histórico e memória.** As últimas 100 mensagens do chat, o histórico de tarefas do agente e os fatos que você pedir para lembrar, sincronizados com a sua conta.
 
 **d) Conteúdo das páginas em uma tarefa.** Quando você pede uma tarefa, o agente recebe o texto e a estrutura da aba atual (título, endereço e elementos interativos) e, quando pedir, capturas de tela. Esse conteúdo é enviado para processar a tarefa e não é usado para outro fim.
 
