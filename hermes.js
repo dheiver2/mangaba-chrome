@@ -195,7 +195,7 @@ async function runHermes(task) {
     const fluxo = await fetch(hermesBase() + "/v1/chat/completions", {
       method: "POST",
       headers: { ...cabecalhos, "X-Mangaba-Key": cfg.key || "" },
-      body: JSON.stringify({ model: "hermes-agent", messages: [{ role: "user", content: task + (await contextoDaAba()) + pagina + contextoDosDados() }], stream: true }),
+      body: JSON.stringify({ model: "hermes-agent", motor: cfg.motor || "hermes", messages: [{ role: "user", content: task + (await contextoDaAba()) + pagina + contextoDosDados() }], stream: true }),
       signal: agentRun.abort.signal,
     });
     if (!fluxo.ok) {
