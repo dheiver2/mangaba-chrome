@@ -137,7 +137,11 @@ async function abrirCanalHermes() {
       try {
         const inst = await hermesInstalacao();
         const cabecalhos = { Authorization: "Bearer " + inst.chave };
-        const resposta = await fetch(hermesBase() + "/navegador/canal", { headers: cabecalhos, signal: controle.signal });
+        // a chave do Router vai só para o Jev decidir ações sensíveis; a ponte não a guarda
+        const resposta = await fetch(hermesBase() + "/navegador/canal", {
+          headers: { ...cabecalhos, "X-Mangaba-Key": cfg.key || "" },
+          signal: controle.signal,
+        });
         if (!resposta.ok) throw new Error(`canal respondeu ${resposta.status}`);
         for await (const quadro of lerSSEHermes(resposta.body)) {
           if (quadro.evento !== "navegador.acao") continue;
