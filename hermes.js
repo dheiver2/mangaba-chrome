@@ -122,6 +122,46 @@ async function executarAcaoHermes(acao) {
   return esconderValores(r.ok ? String(r.out ?? "ok") : "erro: " + (r.error || "falhou"), dados);
 }
 
+// ---- Canal do painel ----
+// Com o painel aberto, a ponte pode mandar ações de clientes MCP externos (Claude Code,
+// Codex) mesmo sem uma conversa em curso. O canal é este stream; ele reconecta sozinho
+// e cai quando o painel fecha, o que faz o cliente externo ver "painel não aberto".
+let canalHermes = null;
+
+async function abrirCanalHermes() {
+  if (canalHermes) return;
+  const controle = new AbortController();
+  canalHermes = controle;
+  (async () => {
+    while (canalHermes === controle) {
+      try {
+        const inst = await hermesInstalacao();
+        const cabecalhos = { Authorization: "Bearer " + inst.chave };
+        const resposta = await fetch(hermesBase() + "/navegador/canal", { headers: cabecalhos, signal: controle.signal });
+        if (!resposta.ok) throw new Error(`canal respondeu ${resposta.status}`);
+        for await (const quadro of lerSSEHermes(resposta.body)) {
+          if (quadro.evento !== "navegador.acao") continue;
+          const acao = JSON.parse(quadro.dados);
+          const saida = await executarAcaoHermes(acao);
+          await fetch(hermesBase() + "/navegador/resultado", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...cabecalhos },
+            body: JSON.stringify({ id: acao.id, saida: String(saida).slice(0, 60000) }),
+            signal: controle.signal,
+          });
+        }
+      } catch (_) { /* rede caiu ou painel fechou: tenta de novo abaixo */ }
+      if (canalHermes !== controle) break;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  })();
+}
+
+function fecharCanalHermes() {
+  if (canalHermes) canalHermes.abort();
+  canalHermes = null;
+}
+
 const erroHermes = (msg, chaveRecusada) => Object.assign(new Error(msg), { chaveRecusada });
 
 // Executa uma tarefa pelo Hermes. Retorna quando o stream termina.

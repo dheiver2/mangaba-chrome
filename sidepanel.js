@@ -339,6 +339,34 @@ async function send() {
   await runHermes(question);
 }
 
+// Token para clientes MCP externos (Claude Code, Codex). O texto aparece uma vez.
+$("btnGerarToken").onclick = async () => {
+  const inst = await hermesInstalacao();
+  const resposta = await fetch(hermesBase() + "/instalacao/mcp-token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + inst.chave },
+    body: JSON.stringify({ escopo: $("mcpEscopo").value }),
+  });
+  const dados = await resposta.json().catch(() => ({}));
+  if (!resposta.ok) { $("mcpSaida").textContent = "não consegui gerar o token: " + (dados.erro || resposta.status); return; }
+  const url = hermesBase() + "/mcp";
+  $("mcpSaida").textContent =
+    "Claude Code:\n" +
+    `claude mcp add --transport http mangaba ${url} --header "Authorization: Bearer ${dados.token}"\n\n` +
+    "Codex (guarde o token numa variável de ambiente):\n" +
+    `export MANGABA_MCP_TOKEN="${dados.token}"\n` +
+    `codex mcp add mangaba --url ${url} --bearer-token-env-var MANGABA_MCP_TOKEN\n\n` +
+    `Escopo: ${dados.escopo}. Gerar outro token invalida este.`;
+};
+$("btnRevogarToken").onclick = async () => {
+  const inst = await hermesInstalacao();
+  await fetch(hermesBase() + "/instalacao/mcp-token/revogar", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + inst.chave },
+  });
+  $("mcpSaida").textContent = "token revogado: clientes externos perdem o acesso.";
+};
+
 btnSend.onclick = () => {
   if (agentRun && !agentRun.waiting) { agentRun.cancel = true; agentRun.abort?.abort(); return; }
   send();
@@ -357,6 +385,8 @@ let modoCriar = false;
 
 function render() {
   const estado = estadoAcesso(account, cfg.key);
+  // o canal só existe com acesso completo: sem conta e chave, a ponte não deve agir na aba
+  if (estado === "pronto") abrirCanalHermes(); else fecharCanalHermes();
   $("telaEntrada").classList.toggle("hidden", estado !== "entrada");
   $("telaChave").classList.toggle("hidden", estado !== "chave");
   for (const id of ["chat", "rodapeChat", "btnSettings", "usuarioTopo"]) $(id).classList.toggle("hidden", estado !== "pronto");

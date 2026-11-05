@@ -72,6 +72,16 @@
       <button id="btnExcluirConta" type="button">Excluir conta e dados sincronizados</button>
     </details>
   </div>
+  <div id="grpMcp" style="border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:10px">
+    <strong>Clientes externos (Claude Code, Codex)</strong>
+    <div style="font-size:12px;color:#555;margin:4px 0">Leitura só observa a página. Ações também clicam, digitam e navegam.</div>
+    <select id="mcpEscopo"><option value="leitura">Somente leitura</option><option value="acoes">Ações na página</option></select>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <button id="btnGerarToken" type="button">Gerar token</button>
+      <button id="btnRevogarToken" type="button">Revogar</button>
+    </div>
+    <pre id="mcpSaida" style="font-size:11px;white-space:pre-wrap;word-break:break-all"></pre>
+  </div>
   <hr>
   <label>Meus dados (chave: valor, um por linha). O agente só vê os nomes, como {{email}}; o valor é posto direto na página e nunca vai ao modelo
     <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
