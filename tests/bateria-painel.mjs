@@ -12,6 +12,9 @@ async function preparar(c, motor) {
     myWindowId = ws.find((w) => w.tabs.some((t) => !t.url.startsWith("chrome-extension://"))).id;
     cfg.key = ${JSON.stringify(CHAVE)};
     cfg.motor = ${JSON.stringify(motor)};
+    // sessão de teste só em memória (ver tests/aviso-primeira.mjs)
+    account = { token: "teste-local", user: { id: "teste-local", email: "teste@local" } };
+    render();
     document.getElementById("chat").innerHTML = "";
     return true;
   })()`);
