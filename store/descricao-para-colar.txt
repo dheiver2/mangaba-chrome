@@ -12,10 +12,13 @@ Como funciona:
 - O raciocínio do agente roda em servidores da Mangaba, no Brasil. A extensão envia a tarefa e o conteúdo da página necessário para ela.
 - Para usar, você entra com uma conta Mangaba e conecta a sua própria chave do Mangaba Router. A chave é conferida no Router e fica só neste navegador, ligada à sua conta.
 - O histórico e a memória ficam na sua conta e são sincronizados entre os seus navegadores.
+- Você escolhe o motor da conversa nas configurações: Hermes (padrão) ou Claude Code, ambos pelo Mangaba Router.
+- Opcional: gere um token para usar a sua aba a partir do Claude Code ou do Codex no seu computador, com escopo de leitura ou de ações. O token pode ser revogado a qualquer momento.
 
 Privacidade e controle:
 - A extensão não guarda senhas nem cartões. Quando uma página pede login, o agente para e pede que você entre.
 - Ações que enviam mensagens, fazem compras ou publicam conteúdo pedem a sua confirmação antes.
 - Você pode apagar o histórico e a conta a qualquer momento, e os dados saem dos servidores junto com a conta.
+- Na primeira tarefa, a extensão avisa o que é enviado ao servidor antes de começar.
 
 Detalhes na política de privacidade.
