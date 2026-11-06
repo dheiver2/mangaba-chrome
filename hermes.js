@@ -119,7 +119,9 @@ async function executarAcaoHermes(acao) {
   const dados = meusDados();
   const comValores = Object.fromEntries(Object.entries(args).map(([k, v]) => [k, typeof v === "string" ? trocarMarcadores(v, dados) : v]));
   const r = await tool(acao.tool, comValores);
-  return esconderValores(r.ok ? String(r.out ?? "ok") : "erro: " + (r.error || "falhou"), dados);
+  // saída que não é texto (ex.: lista de elementos do snapshot) vai como JSON, não "[object Object]"
+  const saida = typeof r.out === "string" ? r.out : r.out == null ? "ok" : JSON.stringify(r.out);
+  return esconderValores(r.ok ? saida : "erro: " + (r.error || "falhou"), dados);
 }
 
 // ---- Canal do painel ----
