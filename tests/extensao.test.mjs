@@ -173,7 +173,7 @@ test("validarChaveRouter: 200 aceita, 401 recusa, falha de rede pede nova tentat
   let pedido;
   const resposta = (status) => async (url, opts) => { pedido = { url, opts }; return { ok: status === 200, status }; };
   assert.equal((await carregarAcesso({ fetch: resposta(200) }).ctx.validarChaveRouter(" mr-boa ")).ok, true);
-  assert.equal(pedido.url, "https://mangabarouter.store/v1/models");
+  assert.equal(pedido.url, "https://router.mangaba.ia.br/v1/models");
   assert.equal(pedido.opts.headers.Authorization, "Bearer mr-boa");
   const ruim = await carregarAcesso({ fetch: resposta(401) }).ctx.validarChaveRouter("mr-ruim");
   assert.equal(ruim.motivo, "invalida");

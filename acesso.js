@@ -3,7 +3,7 @@
 // A chave fica em chrome.storage.local, separada por usuário: não sincroniza pela conta
 // Google do Chrome e não passa de um usuário para outro no mesmo navegador.
 
-const ROUTER_URL = "https://mangabarouter.store";
+const ROUTER_URL = "https://router.mangaba.ia.br";
 const ROUTER_CHAVES_URL = ROUTER_URL + "/console"; // onde o usuário cria a chave
 
 const chaveStorageKey = (userId) => "mangaba_chave_" + userId;

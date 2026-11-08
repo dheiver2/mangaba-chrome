@@ -32,7 +32,7 @@ const SIMULADOR = `(() => {
       if (u.pathname === "/auth/me") return s.expirada ? json(401, { error: "sessão inválida ou expirada" }) : json(200, { user: {} });
       if (u.pathname.startsWith("/sync/")) return json(200, { payload: null });
     }
-    if (u.host === "mangabarouter.store" && u.pathname === "/v1/models") {
+    if (u.host === "router.mangaba.ia.br" && u.pathname === "/v1/models") {
       return auth === "Bearer mr-valida" ? json(200, { data: [] }) : json(401, { error: { message: "chave inválida ou revogada" } });
     }
     if (u.host === "hermes.mangaba.ia.br") {

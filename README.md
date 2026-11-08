@@ -18,7 +18,7 @@ Just type a task and send. Flow: a planner generates a short plan → the Orches
 ## Access (since 2.17.0)
 The panel only opens the chat after two steps:
 1. **Sign in or create a Mangaba account** (required; history and memory sync with it).
-2. **Connect your Mangaba Router key** (`mr-...`). It is checked against the Router's `/v1/models` and stored only in this browser (`chrome.storage.local`, per account). Get one at the [Mangaba Router console](https://mangabarouter.store/console).
+2. **Connect your Mangaba Router key** (`mr-...`). It is checked against the Router's `/v1/models` and stored only in this browser (`chrome.storage.local`, per account). Get one at the [Mangaba Router console](https://router.mangaba.ia.br/console).
 
 Users coming from 2.16.0 keep their key: it moves to the first account that signs in on that browser.
 
