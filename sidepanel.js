@@ -15,7 +15,6 @@ chrome.windows.getCurrent().then((w) => { myWindowId = w.id; }).catch(() => {});
 
 const DEFAULTS = {
   hermesUrl: "https://hermes.mangaba.ia.br", // agente: Hermes; o modelo que raciocina é o Mangaba Router
-  motor: "hermes", // "hermes" ou "claude" (Claude Code no servidor, pelo Mangaba Router)
   dados: "",
   lerPagina: true, // manda o texto da aba aberta junto com o pedido
 };
@@ -32,7 +31,6 @@ function salvarCfgSync() {
 if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   cfg = { ...saved, key: cfg.key };
   $("cfgDados").value = cfg.dados || "";
-  $("cfgMotor").value = cfg.motor || "hermes";
   chrome.storage.local.get({ setasAtivas: true }, (v) => { $("cfgSetas").checked = v.setasAtivas !== false; });
   $("ctxPagina").checked = cfg.lerPagina !== false;
 });
@@ -83,7 +81,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 $("btnSave").onclick = () => {
-  cfg = { ...cfg, dados: $("cfgDados").value.trim(), motor: $("cfgMotor").value };
+  cfg = { ...cfg, dados: $("cfgDados").value.trim() };
   chrome.storage.local.set({ setasAtivas: $("cfgSetas").checked });
   salvarCfgSync();
   $("settings").classList.add("hidden");
@@ -440,7 +438,6 @@ async function entrouNaConta() {
     await syncPull(account, { includeSettings: true });
     await syncPush(account);
     $("cfgDados").value = cfg.dados || "";
-  $("cfgMotor").value = cfg.motor || "hermes";
   chrome.storage.local.get({ setasAtivas: true }, (v) => { $("cfgSetas").checked = v.setasAtivas !== false; });
     $("ctxPagina").checked = cfg.lerPagina !== false;
   } catch { /* sincronização falhou: o uso local continua */ }
