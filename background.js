@@ -816,7 +816,7 @@ const aguardaCarregamentoFn = async () => {
 // mostra o nome da ação. Roda na página, dentro de um shadow DOM para não herdar estilos.
 // Desligável em storage (setasAtivas). Se a página não aceitar script, a ação segue sem seta.
 function setaFn(x, y, rotulo, agente) {
-  // uma seta por agente, com cor própria: agentes diferentes trabalham ao mesmo tempo sem se confundir
+  // uma seta por agente, com cor própria, rastro de cada movimento e um enxame de fantasmas
   const cores = ["#E94A12", "#2563EB", "#16A34A", "#9333EA", "#DB2777", "#0891B2"];
   const chave = String(agente || "principal").replace(/[^a-zA-Z0-9]/g, "") || "principal";
   let codigo = 0;
@@ -830,23 +830,55 @@ function setaFn(x, y, rotulo, agente) {
     host.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;";
     const sombra = host.attachShadow({ mode: "open" }); // open: a função lê host.shadowRoot nas chamadas seguintes
     sombra.innerHTML = `<style>
-      .seta{position:fixed;left:0;top:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .3s;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+      .rastros{position:fixed;left:0;top:0;width:100vw;height:100vh;overflow:visible;pointer-events:none}
+      .rastro{stroke-linecap:round;animation:apaga 1.8s ease-out forwards}
+      @keyframes apaga{0%{opacity:.85}100%{opacity:0}}
+      .seta,.fantasma{position:fixed;left:0;top:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .3s;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+      .fantasma{opacity:0;transform-origin:center}
       .anel{position:fixed;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid ${cor};opacity:0;pointer-events:none}
       .anel.on{animation:pulso .9s ease-out}
       @keyframes pulso{0%{transform:scale(.4);opacity:1}100%{transform:scale(1.7);opacity:0}}
       .rot{position:fixed;color:#fff;font:600 12px/1.2 system-ui,sans-serif;padding:4px 8px;border-radius:6px;white-space:nowrap;transition:opacity .3s;background:${cor}}
     </style>
+    <svg class="rastros"></svg>
     <svg class="seta" width="22" height="26" viewBox="0 0 22 26"><path d="M2 2 L2 21 L7 16.5 L10.5 24 L13.5 22.6 L10 15.2 L17 15.2 Z" fill="${cor}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
     <div class="anel"></div><div class="rot"></div>`;
     document.documentElement.appendChild(host);
   }
   const sombra = host.shadowRoot;
   const seta = sombra.querySelector(".seta"), anel = sombra.querySelector(".anel"), rot = sombra.querySelector(".rot");
+  const rastros = sombra.querySelector(".rastros");
   const alvoX = Math.min(Math.max(0, x), window.innerWidth - 4);
   const alvoY = Math.min(Math.max(0, y), window.innerHeight - 4);
-  // cada seta guarda onde estava, para o movimento de cada agente ser visível
   window.__mangabaSetas = window.__mangabaSetas || {};
   const antes = window.__mangabaSetas[chave] || { x: Math.max(0, alvoX - 160), y: Math.max(0, alvoY - 120) };
+
+  // rastro: linha do ponto anterior até o novo, que se apaga sozinha
+  const linha = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  linha.setAttribute("x1", antes.x + 2); linha.setAttribute("y1", antes.y + 2);
+  linha.setAttribute("x2", alvoX); linha.setAttribute("y2", alvoY);
+  linha.setAttribute("stroke", cor); linha.setAttribute("stroke-width", "2.5");
+  linha.setAttribute("class", "rastro");
+  rastros.appendChild(linha);
+  setTimeout(() => linha.remove(), 1900);
+
+  // enxame: fantasmas da seta que chegam com atraso e em pontos próximos
+  sombra.querySelectorAll(".fantasma").forEach((f) => f.remove());
+  const desvios = [[-16, -10], [-24, 6], [-6, -22], [12, -18]];
+  desvios.forEach(([dx, dy], i) => {
+    const f = seta.cloneNode(true);
+    f.setAttribute("class", "fantasma");
+    f.style.transition = "none";
+    f.style.transform = `translate(${antes.x}px, ${antes.y}px)`;
+    sombra.appendChild(f);
+    f.getBoundingClientRect();
+    f.style.transition = `transform .55s cubic-bezier(.2,.8,.2,1) ${i * 70}ms, opacity .3s ${i * 70}ms`;
+    f.style.transform = `translate(${alvoX - 2 + dx}px, ${alvoY - 2 + dy}px)`;
+    f.style.opacity = String(0.55 - i * 0.1);
+    setTimeout(() => { f.style.opacity = "0"; }, 1500 + i * 70);
+    setTimeout(() => f.remove(), 2100 + i * 70);
+  });
+
   seta.style.opacity = "1";
   seta.style.transition = "none";
   seta.style.transform = `translate(${antes.x}px, ${antes.y}px)`;
