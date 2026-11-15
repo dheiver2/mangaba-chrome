@@ -904,7 +904,7 @@ async function mostrarSeta(tabId, x, y, rotulo, agente) {
   try {
     const { setasAtivas } = await chrome.storage.local.get({ setasAtivas: true });
     if (setasAtivas === false) return;
-    await chrome.scripting.executeScript({ target: { tabId }, func: setaFn, args: [x, y, rotulo, agente] });
+    await chrome.scripting.executeScript({ target: { tabId }, func: setaFn, args: [x, y, rotulo, agente || "principal"] });
     await new Promise((r) => setTimeout(r, 450)); // a seta chega antes do clique
   } catch (_) { /* página sem script (chrome://, loja): a ação segue sem seta */ }
 }
