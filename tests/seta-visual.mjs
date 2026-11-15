@@ -12,7 +12,7 @@ try {
   const r = await c.acao("digitar", { i: 0, texto: "Ana" });
   console.log("   ↳ ação:", String(r.out ?? r.error ?? JSON.stringify(r)).slice(0, 120));
   await espera(150);
-  const existe = await c.naPagina(`!!document.getElementById("__mangaba_seta")`);
+  const existe = await c.naPagina(`!!document.getElementById("__mangaba_seta_principal")`);
   assert.equal(existe, true, "a seta não foi desenhada na página");
   const cap = await c.pagina.enviar("Page.captureScreenshot", { format: "png" });
   writeFileSync(saida, Buffer.from(cap.result.data, "base64"));
