@@ -4,7 +4,7 @@
 // Sem conta, tudo continua só local, como antes.
 
 const ACCOUNT_KEY = "mangaba_account"; // {apiUrl, token, user} em chrome.storage.local
-const ACCOUNT_DEFAULT_URL = "https://mangaba-chrome-backend.vercel.app";
+const ACCOUNT_DEFAULT_URL = "https://conta.mangaba.ia.br";
 const SYNC_RECORD_LIMIT = 100;
 
 async function accountLoad() {
