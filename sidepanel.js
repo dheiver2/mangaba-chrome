@@ -314,6 +314,14 @@ function respostaSocial(q) {
   return null;
 }
 
+// aviso de envio: uma vez por instalação do navegador
+function avisoEnvioVisto() {
+  try { return localStorage.getItem("avisoEnvioVisto") === "1"; } catch (_) { return true; }
+}
+function marcarAvisoVisto() {
+  try { localStorage.setItem("avisoEnvioVisto", "1"); } catch (_) { /* sem armazenamento, o aviso volta */ }
+}
+
 async function send() {
   // sem sessão ou sem chave o chat nem aparece; isto cobre atalhos de teclado e corridas
   if (estadoAcesso(account, cfg.key) !== "pronto") { render(); return; }
@@ -337,6 +345,14 @@ async function send() {
 
   const social = respostaSocial(question);
   if (social) { addMsg("assistant", social); agentHistory.push({ task: question, resposta: social }); return; }
+
+  // aviso único, antes da primeira tarefa: o conteúdo da aba vai ao servidor do agente
+  if (!avisoEnvioVisto()) {
+    addMsg("assistant", "Antes da primeira tarefa: ao pedir uma tarefa, o texto e a estrutura da aba atual vão ao servidor do agente para serem processados. Você pode apagar a conta e os dados em Configurações. Envie a tarefa de novo para continuar.");
+    marcarAvisoVisto();
+    input.value = question;
+    return;
+  }
 
   await runHermes(question);
 }

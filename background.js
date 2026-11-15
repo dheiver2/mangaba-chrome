@@ -629,6 +629,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         else if (tool === "clicar") {
           const alvo = await exec(tab.id, alvoFn, [args.i]);
           if (!alvo.ok) throw new Error(alvo.erro);
+          await mostrarSeta(tab.id, alvo.x, alvo.y, "clicando");
           const antes = (await chrome.tabs.get(tab.id)).url;
           let real = true;
           try { await cliqueReal(tab.id, alvo.x, alvo.y); } catch { real = false; await exec(tab.id, clickFn, [args.i]); }
@@ -640,6 +641,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             + (depois !== antes ? " — a página mudou para " + depois : "");
         } else if (tool === "digitar") {
           const texto = String(args.texto ?? "");
+          const alvo = await exec(tab.id, alvoFn, [args.i]).catch(() => null);
+          if (alvo?.ok) await mostrarSeta(tab.id, alvo.x, alvo.y, "digitando");
           const foco = await exec(tab.id, focoFn, [args.i, true]);
           if (!foco.ok) throw new Error(foco.erro);
           let real = true;
@@ -808,6 +811,63 @@ const aguardaCarregamentoFn = async () => {
 
   return tentativas < 20 ? "carregado" : "timeout (spinner pode estar travado)";
 };
+
+// Seta visível do que o agente está fazendo: uma seta laranja vai até o elemento, pulsa e
+// mostra o nome da ação. Roda na página, dentro de um shadow DOM para não herdar estilos.
+// Desligável em storage (setasAtivas). Se a página não aceitar script, a ação segue sem seta.
+function setaFn(x, y, rotulo) {
+  const ID = "__mangaba_seta";
+  let host = document.getElementById(ID);
+  if (!host) {
+    host = document.createElement("div");
+    host.id = ID;
+    host.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483647;pointer-events:none;";
+    const sombra = host.attachShadow({ mode: "open" }); // open: a função lê host.shadowRoot nas chamadas seguintes
+    sombra.innerHTML = `<style>
+      .seta{position:fixed;left:0;top:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .3s;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+      .anel{position:fixed;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #E94A12;opacity:0;pointer-events:none}
+      .anel.on{animation:pulso .9s ease-out}
+      @keyframes pulso{0%{transform:scale(.4);opacity:1}100%{transform:scale(1.7);opacity:0}}
+      .rot{position:fixed;background:#1E0D01;color:#fff;font:600 12px/1.2 system-ui,sans-serif;padding:4px 8px;border-radius:6px;white-space:nowrap;transition:opacity .3s}
+    </style>
+    <svg class="seta" width="22" height="26" viewBox="0 0 22 26"><path d="M2 2 L2 21 L7 16.5 L10.5 24 L13.5 22.6 L10 15.2 L17 15.2 Z" fill="#E94A12" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>
+    <div class="anel"></div><div class="rot"></div>`;
+    document.documentElement.appendChild(host);
+  }
+  const sombra = host.shadowRoot;
+  const seta = sombra.querySelector(".seta"), anel = sombra.querySelector(".anel"), rot = sombra.querySelector(".rot");
+  const alvoX = Math.min(Math.max(0, x), window.innerWidth - 4);
+  const alvoY = Math.min(Math.max(0, y), window.innerHeight - 4);
+  // a seta parte de onde estava antes (ou de um canto), para o movimento ser visível
+  const antes = window.__mangabaSetaPos || { x: Math.max(0, alvoX - 160), y: Math.max(0, alvoY - 120) };
+  seta.style.opacity = "1";
+  seta.style.transition = "none";
+  seta.style.transform = `translate(${antes.x}px, ${antes.y}px)`;
+  seta.getBoundingClientRect();
+  seta.style.transition = "transform .45s cubic-bezier(.2,.8,.2,1), opacity .3s";
+  seta.style.transform = `translate(${alvoX - 2}px, ${alvoY - 2}px)`;
+  window.__mangabaSetaPos = { x: alvoX - 2, y: alvoY - 2 };
+  anel.style.left = alvoX + "px";
+  anel.style.top = alvoY + "px";
+  anel.classList.remove("on");
+  anel.getBoundingClientRect();
+  anel.classList.add("on");
+  rot.textContent = rotulo;
+  rot.style.opacity = "1";
+  rot.style.left = Math.min(alvoX + 20, window.innerWidth - 140) + "px";
+  rot.style.top = Math.min(alvoY + 22, window.innerHeight - 30) + "px";
+  clearTimeout(window.__mangabaSetaTimer);
+  window.__mangabaSetaTimer = setTimeout(() => { seta.style.opacity = "0"; rot.style.opacity = "0"; }, 2600);
+}
+
+async function mostrarSeta(tabId, x, y, rotulo) {
+  try {
+    const { setasAtivas } = await chrome.storage.local.get({ setasAtivas: true });
+    if (setasAtivas === false) return;
+    await chrome.scripting.executeScript({ target: { tabId }, func: setaFn, args: [x, y, rotulo] });
+    await new Promise((r) => setTimeout(r, 450)); // a seta chega antes do clique
+  } catch (_) { /* página sem script (chrome://, loja): a ação segue sem seta */ }
+}
 
 // Segmentação de snapshot: detectar seções (header, nav, main, sidebar, footer)
 const segmentaSnapshotFn = () => {
