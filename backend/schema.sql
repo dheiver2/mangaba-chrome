@@ -22,3 +22,11 @@ create table if not exists auth_tentativas (
   ts timestamptz not null default now()
 );
 create index if not exists auth_tentativas_ip_ts on auth_tentativas (ip, ts);
+
+-- Pedidos de redefinição de senha: só o hash do token fica no banco; uso único e com validade curta.
+create table if not exists password_resets (
+  token_hash text primary key,
+  user_id    uuid not null references users(id) on delete cascade,
+  expires_at timestamptz not null,
+  used_at    timestamptz
+);

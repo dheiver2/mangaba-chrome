@@ -32,6 +32,11 @@ async function accountRequest(apiUrl, path, { method = "GET", body, token } = {}
   return data;
 }
 
+// Pede o link de redefinição. A resposta é sempre a mesma, para não revelar contas existentes.
+async function accountEsqueci(apiUrl, email) {
+  return accountRequest(apiUrl, "/auth/esqueci", { method: "POST", body: { email } });
+}
+
 async function accountSignIn(apiUrl, email, password) {
   const data = await accountRequest(apiUrl, "/auth/login", { method: "POST", body: { email, password } });
   const account = { apiUrl, token: data.token, user: data.user };

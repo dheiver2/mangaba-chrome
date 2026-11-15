@@ -447,6 +447,20 @@ async function entrouNaConta() {
   } catch { /* sincronização falhou: o uso local continua */ }
 }
 
+// Link de redefinição por e-mail (Resend). A mensagem é a mesma exista ou não a conta.
+$("btnEsqueci").onclick = async () => {
+  const email = $("entEmail").value.trim();
+  const erro = $("entErro");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erro.textContent = "Digite o e-mail da conta para receber o link."; return; }
+  erro.textContent = "Enviando…";
+  try {
+    const r = await accountEsqueci(ACCOUNT_DEFAULT_URL, email);
+    erro.textContent = r.mensagem || "Se o e-mail estiver cadastrado, enviamos um link para criar uma nova senha.";
+  } catch (err) {
+    erro.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+  }
+};
+
 $("formEntrada").onsubmit = async (e) => {
   e.preventDefault();
   const nome = $("entNome").value.trim();
