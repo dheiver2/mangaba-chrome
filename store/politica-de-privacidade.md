@@ -1,6 +1,6 @@
 # Política de Privacidade — Mangaba AI
 
-**Última atualização:** 31 de outubro de 2026
+**Última atualização:** 6 de novembro de 2026
 **Responsável:** Dheiver Santos — contato: dheiver.santos@mangaba.ia.br
 
 Esta política explica quais dados a extensão Mangaba AI trata, para quê, com quem compartilha e como você controla isso. Ela segue a LGPD.
@@ -9,7 +9,7 @@ Esta política explica quais dados a extensão Mangaba AI trata, para quê, com 
 
 **a) Conta (obrigatória para usar a extensão).** Ao criar uma conta: nome, e-mail e senha. A senha é guardada apenas como hash (bcrypt). Não temos acesso à senha em texto.
 
-**b) Configurações.** Modelo escolhido, temperatura, número de passos e preferências. A sua chave do Mangaba Router fica só no seu navegador (armazenamento local da extensão), separada por conta. Ela não é sincronizada com a conta nem pela conta Google do Chrome. Ao conectá-la, a extensão a envia ao Mangaba Router apenas para conferir se é válida.
+**b) Configurações.** Modelo escolhido, temperatura, número de passos e preferências. A sua chave do Mangaba Router fica só no seu navegador (armazenamento local da extensão), separada por conta. Ela não é sincronizada com a conta nem pela conta Google do Chrome. Ao conectá-la, a extensão a envia ao Mangaba Router para conferir se é válida. Em cada tarefa, a chave segue no pedido ao servidor e fica só na memória dele durante a tarefa; não é gravada.
 
 **c) Histórico e memória.** As últimas 100 mensagens do chat, o histórico de tarefas do agente e os fatos que você pedir para lembrar, sincronizados com a sua conta.
 
@@ -18,6 +18,12 @@ Esta política explica quais dados a extensão Mangaba AI trata, para quê, com 
 **e) Registro técnico.** Identificador da instalação do agente, a data e o volume de uso necessários para funcionar e para os limites de cota.
 
 **f) Depuração da aba durante ações.** Para que cliques e digitação funcionem em sites que recusam eventos simulados, a extensão usa a permissão de depuração do Chrome na aba da tarefa, apenas enquanto executa as ações que você pediu. Ela não lê o tráfego de rede e se desconecta sozinha logo depois.
+
+**g) Decisões de segurança (Jev).** Antes de uma ação que pode enviar, pagar, publicar ou apagar algo (clicar, digitar, escrever, preencher, teclas, curtir), o servidor pode pedir ao Jev, serviço de decisão do Mangaba Router, uma estimativa de risco. Para isso são enviados o nome da ação e os valores que ela usa, como um texto digitado. Quando esse recurso estiver ativo, o painel avisa.
+
+**h) Clientes externos (Claude Code, Codex).** Se você gerar um token no painel, um programa no seu computador pode observar a página (escopo de leitura) ou também agir nela (escopo de ações), pelo escopo que você escolher. Guardamos só o hash do token, e você pode revogá-lo no painel a qualquer momento.
+
+**i) Escolha do motor.** Você não escolhe o motor da conversa. Para cada tarefa, um modelo de decisão do Mangaba Router (Brier) escolhe entre Hermes, Claude Code ou os dois. Para isso, o início do texto da tarefa (até 1.500 caracteres) é enviado ao Router, junto com a sua chave, e a decisão não é guardada.
 
 ## 2. O que não coletamos
 
@@ -37,6 +43,8 @@ Não vendemos seus dados e não os usamos para publicidade.
 
 - **Servidor do agente (Hermes), hospedado no Brasil**, para processar as tarefas.
 - **Mangaba Router**, que recebe as requisições dos modelos de IA e pode encaminhá-las a provedores de modelos. Esses provedores processam o texto da tarefa.
+- **TypeSafe (Jev), via Mangaba Router**, apenas para as estimativas de risco do item g.
+- **Mangaba Router (Brier)**, apenas para escolher o motor de cada tarefa, como descrito no item i.
 - **Vercel e Neon**, onde ficam a API de conta e o banco de dados da conta.
 
 Não há outros destinatários.

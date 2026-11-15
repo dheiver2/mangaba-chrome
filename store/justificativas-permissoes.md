@@ -39,4 +39,6 @@ Não usamos código remoto. Todo o JavaScript da extensão está no pacote envia
 
 **windows:** identifica a janela onde o painel está aberto, para agir na aba correta.
 
+**Clientes externos (token MCP, opcional):** o usuário pode gerar um token para o Claude Code ou o Codex no próprio computador. O escopo de leitura só observa a página; o de ações também age nela. O token é revogável no painel. Nenhuma ação externa acontece sem o painel aberto.
+
 **debugger (campo da aba Privacy):** entrega o clique, a digitação e as teclas pedidas pelo usuário como eventos reais, que sites e editores aceitam (Google Docs, chats, formulários com validação). Anexa só à aba da tarefa, só durante as ações, e se desconecta após 20 segundos sem uso. Não lê rede nem conteúdo fora da tarefa.

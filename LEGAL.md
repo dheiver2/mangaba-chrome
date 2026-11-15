@@ -43,6 +43,9 @@ Você **NÃO pode**:
 - ✅ Chave do Mangaba Router só no armazenamento local da extensão, separada por conta
 - ✅ Conteúdo da página é enviado ao servidor do agente apenas em uma tarefa pedida pelo usuário
 - ✅ Exclusão de conta disponível no painel (`DELETE /auth/me`, com senha)
+- ✅ Clientes externos (Claude Code, Codex) só com token gerado pelo usuário, com escopo de leitura ou de ações; o servidor guarda só o hash
+- ✅ Estimativas de risco do Jev para ações sensíveis, descritas no item g da política de privacidade
+- ✅ Conteúdo da página vai ao servidor apenas quando o usuário pede uma tarefa ou dá um token a um cliente externo
 
 ## Disclaimer
 
@@ -56,6 +59,6 @@ Ao usar esta extensão, você concorda com estes termos.
 
 ---
 
-**Versão:** 2.13.0  
-**Data:** 26 de outubro de 2026  
+**Versão:** 2.18.0  
+**Data:** 6 de novembro de 2026  
 **Autor:** Dheiver Santos
