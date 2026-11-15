@@ -604,7 +604,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const tab = await getTab(msg.windowId, ["navegar", "voltar", "avancar", "recarregar"].includes(tool));
         if (tool === "snapshot") {
           const cached = await getCachedSnapshot(tab.id, tab.url);
-          if (cached) {
+          // o cache só vale se a lista de elementos ainda está na página; depois de recarregar,
+          // o clique por índice precisa de um snapshot novo
+          const listaViva = cached ? await exec(tab.id, () => (window.__mgbEls || []).length > 0).catch(() => false) : false;
+          if (cached && listaViva) {
             out = cached;
           } else {
             // estabiliza o DOM (readyState + 2 frames) antes de fotografar — como o browser-use
