@@ -205,10 +205,10 @@ function sendMessageWithTimeout(msg, ms = 20000) {
   });
 }
 
-async function tool(t, args) {
+async function tool(t, args, agente) {
   for (let i = 0; i < 3; i++) {
     try {
-      const r = await sendMessageWithTimeout({ type: "AGENT_TOOL", tool: t, args, windowId: myWindowId });
+      const r = await sendMessageWithTimeout({ type: "AGENT_TOOL", tool: t, args, windowId: myWindowId, agente: agente || "principal" });
       if (r !== undefined) return r;
     } catch (e) {
       // AbortSignal já abortado não dispara o listener de novo numa retentativa (o evento só

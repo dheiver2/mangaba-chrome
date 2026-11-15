@@ -118,7 +118,7 @@ async function executarAcaoHermes(acao) {
   }
   const dados = meusDados();
   const comValores = Object.fromEntries(Object.entries(args).map(([k, v]) => [k, typeof v === "string" ? trocarMarcadores(v, dados) : v]));
-  const r = await tool(acao.tool, comValores);
+  const r = await tool(acao.tool, comValores, acao.agente);
   // saída que não é texto (ex.: lista de elementos do snapshot) vai como JSON, não "[object Object]"
   const saida = typeof r.out === "string" ? r.out : r.out == null ? "ok" : JSON.stringify(r.out);
   return esconderValores(r.ok ? saida : "erro: " + (r.error || "falhou"), dados);
@@ -147,14 +147,7 @@ async function abrirCanalHermes() {
         if (!resposta.ok) throw new Error(`canal respondeu ${resposta.status}`);
         for await (const quadro of lerSSEHermes(resposta.body)) {
           if (quadro.evento !== "navegador.acao") continue;
-          const acao = JSON.parse(quadro.dados);
-          const saida = await executarAcaoHermes(acao);
-          await fetch(hermesBase() + "/navegador/resultado", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...cabecalhos },
-            body: JSON.stringify({ id: acao.id, saida: String(saida).slice(0, 60000) }),
-            signal: controle.signal,
-          });
+          devolverAcao(JSON.parse(quadro.dados), { "Content-Type": "application/json", ...cabecalhos });
         }
       } catch (_) { /* rede caiu ou painel fechou: tenta de novo abaixo */ }
       if (canalHermes !== controle) break;
@@ -166,6 +159,18 @@ async function abrirCanalHermes() {
 function fecharCanalHermes() {
   if (canalHermes) canalHermes.abort();
   canalHermes = null;
+}
+
+// Executa uma ação e devolve o texto à ponte. Não espera a anterior terminar: ações de agentes
+// diferentes correm juntas, cada uma com a sua seta.
+function devolverAcao(acao, cabecalhos) {
+  executarAcaoHermes(acao)
+    .then((saida) => fetch(hermesBase() + "/navegador/resultado", {
+      method: "POST",
+      headers: cabecalhos,
+      body: JSON.stringify({ id: acao.id, saida: String(saida).slice(0, 60000) }),
+    }))
+    .catch(() => { /* a ponte já devolveu timeout para esta ação */ });
 }
 
 const erroHermes = (msg, chaveRecusada) => Object.assign(new Error(msg), { chaveRecusada });
@@ -207,14 +212,8 @@ async function runHermes(task) {
 
     for await (const quadro of lerSSEHermes(fluxo.body)) {
       if (quadro.evento === "navegador.acao") {
-        // sequencial de propósito: a próxima ação depende do que esta encontrou na página
-        const acao = JSON.parse(quadro.dados);
-        const saida = await executarAcaoHermes(acao);
-        await fetch(hermesBase() + "/navegador/resultado", {
-          method: "POST",
-          headers: cabecalhos,
-          body: JSON.stringify({ id: acao.id, saida: String(saida).slice(0, 60000) }),
-        });
+        // em paralelo: cada ação tem a sua seta e devolve o resultado quando termina
+        devolverAcao(JSON.parse(quadro.dados), cabecalhos);
         continue;
       }
       if (quadro.evento === "erro") {
