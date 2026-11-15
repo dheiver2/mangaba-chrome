@@ -409,10 +409,9 @@ function render() {
   if (estado === "pronto") abrirCanalHermes(); else fecharCanalHermes();
   $("telaEntrada").classList.toggle("hidden", estado !== "entrada");
   $("telaChave").classList.toggle("hidden", estado !== "chave");
-  for (const id of ["chat", "rodapeChat", "btnSettings", "usuarioTopo"]) $(id).classList.toggle("hidden", estado !== "pronto");
+  for (const id of ["chat", "rodapeChat", "btnSettings"]) $(id).classList.toggle("hidden", estado !== "pronto");
   if (estado !== "pronto") $("settings").classList.add("hidden");
   const nome = account ? account.user.name || account.user.email : "";
-  $("usuarioTopo").textContent = account ? account.user.email : "";
   $("contaStatus").textContent = account ? "Conectado como " + nome + ". Histórico e memória sincronizados com a conta." : "";
   if (estado === "entrada") $(modoCriar ? "entNome" : "entEmail").focus();
   else if (estado === "chave") $("chaveInput").focus();
@@ -425,7 +424,7 @@ function setModoEntrada(criar) {
   $("abaCriar").classList.toggle("ativa", criar);
   $("rotuloNome").classList.toggle("hidden", !criar);
   $("entSenha").autocomplete = criar ? "new-password" : "current-password";
-  $("btnEntrada").textContent = criar ? "Criar conta" : "Entrar";
+  $("btnEntrada").textContent = criar ? "Criar conta" : "Continuar";
   $("entErro").textContent = "";
   $(criar ? "entNome" : "entEmail").focus();
 }
@@ -483,7 +482,7 @@ $("formEntrada").onsubmit = async (e) => {
     erro.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
   } finally {
     btn.disabled = false;
-    btn.textContent = modoCriar ? "Criar conta" : "Entrar";
+    btn.textContent = modoCriar ? "Criar conta" : "Continuar";
   }
 };
 

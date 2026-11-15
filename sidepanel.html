@@ -8,7 +8,6 @@
 <body>
 <header>
   <div class="logo"><img src="icons/mark.png" alt="mangaba.ai"> <span>mangaba<b>.ai</b></span></div>
-  <span id="usuarioTopo" class="usuario-topo hidden"></span>
   <button id="btnSettings" class="hidden" title="Configurações">⚙</button>
 </header>
 
@@ -30,7 +29,7 @@
       <input id="entSenha" type="password" autocomplete="current-password" placeholder="mínimo 8 caracteres" required>
     </label>
     <div id="entErro" class="tela-erro" role="alert"></div>
-    <button id="btnEntrada" class="tela-btn" type="submit">Entrar</button>
+    <button id="btnEntrada" class="tela-btn" type="submit">Continuar</button>
     <button id="btnEsqueci" class="tela-link" type="button">Esqueci minha senha</button>
   </form>
 </section>
@@ -58,41 +57,52 @@
 </div>
 
 <div id="settings" class="hidden">
-  <div id="grpConta" style="border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:10px">
-    <strong>Conta</strong>
-    <div id="contaStatus" style="font-size:12px;color:#555;margin:4px 0"></div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
+  <section class="cfg-grupo" id="grpConta">
+    <h3>Conta</h3>
+    <div id="contaStatus" class="cfg-ajuda"></div>
+    <div class="cfg-linha">
       <button id="btnTrocarChave" type="button">Trocar chave do Router</button>
       <button id="btnSair" type="button">Sair</button>
     </div>
-    <details style="margin-top:8px">
-      <summary style="font-size:12px;cursor:pointer">Excluir conta</summary>
+    <details>
+      <summary class="cfg-ajuda">Excluir conta</summary>
       <label>Senha para confirmar
         <input id="contaSenha" type="password" autocomplete="current-password">
       </label>
-      <button id="btnExcluirConta" type="button">Excluir conta e dados sincronizados</button>
+      <button id="btnExcluirConta" class="btn-perigo" type="button">Excluir conta e dados sincronizados</button>
     </details>
-  </div>
-  <div id="grpMcp" style="border:1px solid #ddd;border-radius:6px;padding:8px;margin-bottom:10px">
-    <strong>Clientes externos (Claude Code, Codex)</strong>
-    <div style="font-size:12px;color:#555;margin:4px 0">Leitura só observa a página. Ações também clicam, digitam e navegam.</div>
-    <select id="mcpEscopo"><option value="leitura">Somente leitura</option><option value="acoes">Ações na página</option></select>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-      <button id="btnGerarToken" type="button">Gerar token</button>
-      <button id="btnRevogarToken" type="button">Revogar</button>
-    </div>
-    <pre id="mcpSaida" style="font-size:11px;white-space:pre-wrap;word-break:break-all"></pre>
-  </div>
-  <hr>
-  <label style="display:flex;gap:6px;align-items:center;margin-bottom:8px"><input id="cfgSetas" type="checkbox" checked> Mostrar a seta do agente na página</label>
-  <label>Motor da conversa
-    <select id="cfgMotor"><option value="hermes">Hermes (padrão)</option><option value="claude">Claude Code (Mangaba Router)</option></select>
-  </label>
-  <label>Meus dados (chave: valor, um por linha). O agente só vê os nomes, como {{email}}; o valor é posto direto na página e nunca vai ao modelo
-    <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
-  </label>
-  <button id="btnClearHistory" style="background: #f44336; color: white;">🗑 Limpar histórico</button>
-  <button id="btnSave">Salvar</button>
+  </section>
+
+  <section class="cfg-grupo">
+    <h3>Agente</h3>
+    <label class="switch-linha">Mostrar a seta na página
+      <input id="cfgSetas" class="switch" type="checkbox" checked>
+    </label>
+    <label>Motor da conversa
+      <select id="cfgMotor"><option value="hermes">Hermes (padrão)</option><option value="claude">Claude Code (Mangaba Router)</option></select>
+    </label>
+    <label>Meus dados
+      <span class="cfg-ajuda">Um por linha, como <code>nome: valor</code>. O agente só vê os nomes (por exemplo {{email}}); o valor vai direto à página e nunca ao modelo.</span>
+      <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
+    </label>
+  </section>
+
+  <details class="cfg-grupo">
+    <summary><h3>Avançado</h3></summary>
+    <section class="cfg-grupo" id="grpMcp">
+      <h3>Clientes externos (Claude Code, Codex)</h3>
+      <div class="cfg-ajuda">Leitura só observa a página. Ações também clicam, digitam e navegam.</div>
+      <select id="mcpEscopo"><option value="leitura">Somente leitura</option><option value="acoes">Ações na página</option></select>
+      <div class="cfg-linha">
+        <button id="btnGerarToken" type="button">Gerar token</button>
+        <button id="btnRevogarToken" type="button">Revogar</button>
+      </div>
+      <pre id="mcpSaida" class="cfg-saida"></pre>
+    </section>
+    <button id="btnClearHistory" class="btn-perigo" type="button">Limpar histórico</button>
+  </details>
+
+  <div class="cfg-rodape"><button id="btnSave" type="button">Salvar</button></div>
 </div>
 
 <main id="chat" class="hidden">

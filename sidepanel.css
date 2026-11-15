@@ -37,6 +37,39 @@ header button {
 #settings input {
   padding: 7px 9px; border: 1px solid var(--borda); border-radius: 8px; font: inherit;
 }
+/* Configurações: grupos simples, um estilo para os botões, ações perigosas discretas */
+#settings { gap: 10px; }
+#settings .cfg-grupo { border: 1px solid var(--borda); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+#settings .cfg-grupo h3 { font-size: 13px; font-weight: 700; margin: 0; color: var(--marrom); }
+#settings details.cfg-grupo summary { cursor: pointer; list-style: none; }
+#settings details.cfg-grupo summary::-webkit-details-marker { display: none; }
+#settings details.cfg-grupo summary::before { content: "▸ "; color: #8A7663; }
+#settings details.cfg-grupo[open] summary::before { content: "▾ "; }
+#settings .cfg-ajuda { font-size: 12px; font-weight: 400; color: #8A7663; line-height: 1.4; }
+#settings .cfg-linha { display: flex; gap: 6px; flex-wrap: wrap; }
+#settings .cfg-saida { font-size: 11px; white-space: pre-wrap; word-break: break-all; color: var(--marrom); }
+#settings label.switch-linha { flex-direction: row; align-items: center; justify-content: space-between; font-weight: 500; font-size: 13px; }
+#settings button {
+  padding: 7px 12px; border: 1px solid var(--borda); border-radius: 8px; background: #fff;
+  color: var(--marrom); font: inherit; font-size: 13px; cursor: pointer;
+}
+#settings button:hover { border-color: var(--laranja); }
+#settings button.btn-perigo { color: #B3261E; border-color: #E9C4C0; }
+#settings button.btn-perigo:hover { border-color: #B3261E; }
+#settings select, #settings textarea {
+  padding: 7px 9px; border: 1px solid var(--borda); border-radius: 8px; font: inherit; font-size: 13px; background: #fff;
+}
+#settings input.switch {
+  appearance: none; width: 36px; height: 20px; border-radius: 999px; background: #E9DED3;
+  position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0;
+}
+#settings input.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; transition: transform .15s;
+}
+#settings input.switch:checked { background: var(--laranja); }
+#settings input.switch:checked::after { transform: translateX(16px); }
+.cfg-rodape { display: flex; justify-content: flex-end; }
 #btnSave {
   align-self: flex-end; padding: 7px 16px; border: none; border-radius: 8px;
   background: var(--laranja); color: #fff; font-weight: 700; cursor: pointer;
@@ -196,9 +229,9 @@ textarea {
   font: inherit; font-weight: 700; cursor: pointer;
 }
 .tela-btn:hover { background: var(--laranja-escuro); }
+.tela-link { background: none; border: 0; color: var(--laranja-escuro); text-decoration: underline; cursor: pointer; margin-top: 10px; font-size: 14px; padding: 0; }
 .tela-btn:disabled { opacity: .6; cursor: progress; }
 .tela-erro { min-height: 1em; font-size: 12.5px; color: #B3261E; }
 .tela-erro:empty { display: none; }
 .tela-link { align-self: flex-start; background: none; border: none; padding: 0; font: inherit; font-size: 13px; color: var(--laranja-escuro); cursor: pointer; text-decoration: underline; }
 
-.tela-link{background:none;border:0;color:#E94A12;text-decoration:underline;cursor:pointer;margin-top:10px;font-size:14px;padding:0}
