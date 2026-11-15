@@ -33,6 +33,7 @@ if (chrome.storage?.sync) chrome.storage.sync.get(DEFAULTS, (saved) => {
   cfg = { ...saved, key: cfg.key };
   $("cfgDados").value = cfg.dados || "";
   $("cfgMotor").value = cfg.motor || "hermes";
+  chrome.storage.local.get({ setasAtivas: true }, (v) => { $("cfgSetas").checked = v.setasAtivas !== false; });
   $("ctxPagina").checked = cfg.lerPagina !== false;
 });
 $("ctxPagina").onchange = () => {
@@ -83,6 +84,7 @@ document.addEventListener("keydown", (e) => {
 });
 $("btnSave").onclick = () => {
   cfg = { ...cfg, dados: $("cfgDados").value.trim(), motor: $("cfgMotor").value };
+  chrome.storage.local.set({ setasAtivas: $("cfgSetas").checked });
   salvarCfgSync();
   $("settings").classList.add("hidden");
   if (account) syncPush(account).catch(() => {});
@@ -440,6 +442,7 @@ async function entrouNaConta() {
     await syncPush(account);
     $("cfgDados").value = cfg.dados || "";
   $("cfgMotor").value = cfg.motor || "hermes";
+  chrome.storage.local.get({ setasAtivas: true }, (v) => { $("cfgSetas").checked = v.setasAtivas !== false; });
     $("ctxPagina").checked = cfg.lerPagina !== false;
   } catch { /* sincronização falhou: o uso local continua */ }
 }
