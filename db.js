@@ -17,7 +17,7 @@ async function initDB() {
     if (db) { resolve(db); return; }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
 
-    req.onerror = () => reject(new Error("Falha ao abrir IndexedDB"));
+    req.onerror = () => reject(new Error("Failed to open IndexedDB"));
     req.onsuccess = () => {
       db = req.result;
       resolve(db);
@@ -135,7 +135,7 @@ async function clearHistory() {
     const req1 = tx.objectStore(STORE_CHAT).clear();
     const req2 = tx.objectStore(STORE_AGENT).clear();
 
-    req1.onerror = req2.onerror = () => reject("Erro ao limpar histórico");
+    req1.onerror = req2.onerror = () => reject("Error clearing history");
     tx.oncomplete = () => resolve();
   });
 }

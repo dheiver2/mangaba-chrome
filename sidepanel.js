@@ -53,10 +53,10 @@ $("ctxPagina").onchange = () => {
 
 $("btnSettings").onclick = () => $("settings").classList.toggle("hidden");
 $("btnClearHistory").onclick = async () => {
-  if (confirm("Tem certeza que quer limpar TODO o histórico? Esta ação não pode ser desfeita.")) {
+  if (confirm("Are you sure you want to clear ALL history? This cannot be undone.")) {
     await clearHistory();
     chat.innerHTML = '';
-    addMsg("assistant").textContent = "Histórico limpo. Comece uma nova conversa.";
+    addMsg("assistant").textContent = "History cleared. Start a new conversation.";
   }
 };
 
@@ -71,7 +71,7 @@ document.addEventListener("keydown", (e) => {
       btnSend.click();
     } else if (e.key === "l" || e.key === "L") {
       e.preventDefault();
-      if (confirm("Limpar histórico?")) {
+      if (confirm("Clear history?")) {
         $("btnClearHistory").click();
       }
     }
@@ -144,7 +144,7 @@ function addMsg(cls, text) {
     const av = document.createElement("img");
     av.className = "avatar"; av.src = "icons/mark.png"; av.alt = "";
     const btn = document.createElement("button");
-    btn.className = "copybtn"; btn.title = "Copiar"; btn.textContent = "⧉";
+    btn.className = "copybtn"; btn.title = "Copy"; btn.textContent = "⧉";
     btn.onclick = () => {
       navigator.clipboard.writeText(div.dataset.raw || div.textContent);
       btn.textContent = "✓"; setTimeout(() => (btn.textContent = "⧉"), 1200);
@@ -185,7 +185,7 @@ function setAssistant(div, text) {
 function sendMessageWithTimeout(msg, ms = 20000) {
   let timer;
   const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error("timeout: service worker não respondeu em " + (ms / 1000) + "s")), ms);
+    timer = setTimeout(() => reject(new Error("timeout: service worker did not respond in " + (ms / 1000) + "s")), ms);
   });
   const racers = [chrome.runtime.sendMessage(msg), timeoutPromise];
   // se o usuário clicar ■ (parar) enquanto isto está pendurado, não faz sentido esperar
@@ -214,12 +214,12 @@ async function tool(t, args, agente) {
       // 2ª e 3ª voltavam a esperar os 20s inteiros do timeout, porque agentRun.abort.signal já
       // estava "aborted" e não reemite o evento. Cancelamento é definitivo: não faz sentido
       // insistir depois que o usuário pediu pra parar.
-      if (e.name === "AbortError") return { ok: false, error: "parado pelo usuário" };
+      if (e.name === "AbortError") return { ok: false, error: "stopped by user" };
       /* canal fechou ou expirou: worker dormiu/travado — tenta de novo */
     }
     await sleep(300);
   }
-  return { ok: false, error: "service worker não respondeu (recarregue a extensão em chrome://extensions)" };
+  return { ok: false, error: "service worker did not respond (reload the extension at chrome://extensions)" };
 }
 
  // hash da imagem → descrição
@@ -230,7 +230,7 @@ let agentRun = null; // {cancel, waiting}
 
 function setStop(on) {
   btnSend.textContent = on ? "■" : "↑";
-  btnSend.title = on ? "Parar tarefa" : "Enviar";
+  btnSend.title = on ? "Stop task" : "Send";
   btnSend.classList.toggle("stop", on);
 }
 
@@ -302,15 +302,15 @@ setInterval(() => {
 // primeira resposta. Em gateway CPU-only isso já rendeu reclamação real de "oi" levando
 // 20s+. Resolvido sem nenhuma chamada ao LLM: regex cobre só a mensagem inteira (não um
 // prefixo), então "oi, pesquise sobre X" continua indo pro agente normalmente.
-const SOCIAL_SAUDACAO = /^(oi+|ol[áa]+|e a[íi]|opa|eae|hey|hello|bom dia|boa tarde|boa noite)[\s!.,?]*$/i;
-const SOCIAL_AGRADECE = /^(obrigad[oa]s?|muito obrigad[oa]|valeu|vlw)[\s!.,?]*$/i;
-const SOCIAL_TCHAU = /^(tchau|flw|falou|at[ée] (mais|logo|amanh[ãa]))[\s!.,?]*$/i;
-const SOCIAL_COMOVAI = /^((oi+|ol[áa]+|e a[íi]|opa|eae)[\s,!]*)?(tudo bem\??|tudo bom\??|como (voc[êe] )?(est[áa]|vai)\??|beleza\??|blz\??)[\s!.,?]*$/i;
+const SOCIAL_SAUDACAO = /^(oi+|ol[áa]+|e a[íi]|opa|eae|hey|hi+|hello|good (morning|afternoon|evening)|bom dia|boa tarde|boa noite)[\s!.,?]*$/i;
+const SOCIAL_AGRADECE = /^(thanks?|thank you|thx|obrigad[oa]s?|muito obrigad[oa]|valeu|vlw)[\s!.,?]*$/i;
+const SOCIAL_TCHAU = /^(bye|goodbye|see you|tchau|flw|falou|at[ée] (mais|logo|amanh[ãa]))[\s!.,?]*$/i;
+const SOCIAL_COMOVAI = /^((oi+|ol[áa]+|e a[íi]|opa|eae)[\s,!]*)?(how are you\??|how's it going\??|tudo bem\??|tudo bom\??|como (voc[êe] )?(est[áa]|vai)\??|beleza\??|blz\??)[\s!.,?]*$/i;
 function respostaSocial(q) {
-  if (SOCIAL_SAUDACAO.test(q)) return "Oi! Como posso ajudar?";
-  if (SOCIAL_AGRADECE.test(q)) return "De nada! Qualquer coisa é só chamar.";
-  if (SOCIAL_TCHAU.test(q)) return "Até mais! 👋";
-  if (SOCIAL_COMOVAI.test(q)) return "Tudo certo por aqui! Em que posso ajudar?";
+  if (SOCIAL_SAUDACAO.test(q)) return "Hi! How can I help?";
+  if (SOCIAL_AGRADECE.test(q)) return "You're welcome! Just ask if you need anything.";
+  if (SOCIAL_TCHAU.test(q)) return "See you! 👋";
+  if (SOCIAL_COMOVAI.test(q)) return "All good here! How can I help?";
   return null;
 }
 
@@ -334,7 +334,7 @@ async function send() {
     addMsg("user", question);
     const resolve = agentRun.waiting;
     agentRun.waiting = null;
-    input.placeholder = "Pergunte algo...";
+    input.placeholder = "Ask something...";
     resolve(question);
     return;
   }
@@ -348,7 +348,7 @@ async function send() {
 
   // aviso único, antes da primeira tarefa: o conteúdo da aba vai ao servidor do agente
   if (!avisoEnvioVisto()) {
-    addMsg("assistant", "Antes da primeira tarefa: ao pedir uma tarefa, o texto e a estrutura da aba atual vão ao servidor do agente para serem processados. Você pode apagar a conta e os dados em Configurações. Envie a tarefa de novo para continuar.");
+    addMsg("assistant", "Before your first task: when you request a task, the text and structure of the current tab are sent to the agent server to be processed. You can delete your account and data in Settings. Send the task again to continue.");
     marcarAvisoVisto();
     input.value = question;
     return;
@@ -366,12 +366,12 @@ $("btnGerarToken").onclick = async () => {
     body: JSON.stringify({ escopo: $("mcpEscopo").value }),
   });
   const dados = await resposta.json().catch(() => ({}));
-  if (!resposta.ok) { $("mcpSaida").textContent = "não consegui gerar o token: " + (dados.erro || resposta.status); return; }
+  if (!resposta.ok) { $("mcpSaida").textContent = "could not generate the token: " + (dados.erro || resposta.status); return; }
   const url = hermesBase() + "/mcp";
   $("mcpSaida").textContent =
     "Claude Code:\n" +
     `claude mcp add --transport http mangaba ${url} --header "Authorization: Bearer ${dados.token}"\n\n` +
-    "Codex (guarde o token numa variável de ambiente):\n" +
+    "Codex (store the token in an environment variable):\n" +
     `export MANGABA_MCP_TOKEN="${dados.token}"\n` +
     `codex mcp add mangaba --url ${url} --bearer-token-env-var MANGABA_MCP_TOKEN\n\n` +
     `Escopo: ${dados.escopo}. Gerar outro token invalida este.`;
@@ -382,7 +382,7 @@ $("btnRevogarToken").onclick = async () => {
     method: "POST",
     headers: { Authorization: "Bearer " + inst.chave },
   });
-  $("mcpSaida").textContent = "token revogado: clientes externos perdem o acesso.";
+  $("mcpSaida").textContent = "token revoked: external clients lose access.";
 };
 
 btnSend.onclick = () => {
@@ -410,7 +410,7 @@ function render() {
   for (const id of ["chat", "rodapeChat", "btnSettings"]) $(id).classList.toggle("hidden", estado !== "pronto");
   if (estado !== "pronto") $("settings").classList.add("hidden");
   const nome = account ? account.user.name || account.user.email : "";
-  $("contaStatus").textContent = account ? "Conectado como " + nome + ". Histórico e memória sincronizados com a conta." : "";
+  $("contaStatus").textContent = account ? "Signed in as " + nome + ". History and memory synced with your account." : "";
   if (estado === "entrada") $(modoCriar ? "entNome" : "entEmail").focus();
   else if (estado === "chave") $("chaveInput").focus();
   return estado;
@@ -422,7 +422,7 @@ function setModoEntrada(criar) {
   $("abaCriar").classList.toggle("ativa", criar);
   $("rotuloNome").classList.toggle("hidden", !criar);
   $("entSenha").autocomplete = criar ? "new-password" : "current-password";
-  $("btnEntrada").textContent = criar ? "Criar conta" : "Continuar";
+  $("btnEntrada").textContent = criar ? "Create account" : "Continue";
   $("entErro").textContent = "";
   $(criar ? "entNome" : "entEmail").focus();
 }
@@ -447,11 +447,11 @@ async function entrouNaConta() {
 $("btnEsqueci").onclick = async () => {
   const email = $("entEmail").value.trim();
   const erro = $("entErro");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erro.textContent = "Digite o e-mail da conta para receber o link."; return; }
-  erro.textContent = "Enviando…";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erro.textContent = "Enter your account email to receive the link."; return; }
+  erro.textContent = "Sending…";
   try {
     const r = await accountEsqueci(ACCOUNT_DEFAULT_URL, email);
-    erro.textContent = r.mensagem || "Se o e-mail estiver cadastrado, enviamos um link para criar uma nova senha.";
+    erro.textContent = r.mensagem || "If the email is registered, we sent a link to create a new password.";
   } catch (err) {
     erro.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
   }
@@ -463,11 +463,11 @@ $("formEntrada").onsubmit = async (e) => {
   const email = $("entEmail").value.trim();
   const senha = $("entSenha").value;
   const erro = $("entErro");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erro.textContent = "Digite um e-mail válido."; return; }
-  if (senha.length < 8) { erro.textContent = "A senha precisa ter pelo menos 8 caracteres."; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erro.textContent = "Enter a valid email."; return; }
+  if (senha.length < 8) { erro.textContent = "The password must be at least 8 characters."; return; }
   const btn = $("btnEntrada");
   btn.disabled = true;
-  btn.textContent = modoCriar ? "Criando conta…" : "Entrando…";
+  btn.textContent = modoCriar ? "Creating account…" : "Signing in…";
   erro.textContent = "";
   try {
     account = modoCriar
@@ -479,7 +479,7 @@ $("formEntrada").onsubmit = async (e) => {
     erro.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
   } finally {
     btn.disabled = false;
-    btn.textContent = modoCriar ? "Criar conta" : "Continuar";
+    btn.textContent = modoCriar ? "Create account" : "Continue";
   }
 };
 
@@ -489,7 +489,7 @@ $("formChave").onsubmit = async (e) => {
   const chave = $("chaveInput").value.trim();
   const btn = $("btnValidarChave");
   btn.disabled = true;
-  btn.textContent = "Validando…";
+  btn.textContent = "Validating…";
   $("chaveErro").textContent = "";
   try {
     const v = await validarChaveRouter(chave);
@@ -500,7 +500,7 @@ $("formChave").onsubmit = async (e) => {
     render();
   } finally {
     btn.disabled = false;
-    btn.textContent = "Validar e continuar";
+    btn.textContent = "Validate and continue";
   }
 };
 
@@ -508,7 +508,7 @@ $("formChave").onsubmit = async (e) => {
 function chaveRouterRecusada(msg) {
   cfg.key = ""; // a guardada fica até uma nova ser validada
   render();
-  $("chaveErro").textContent = "O Mangaba Router recusou a sua chave" + (msg ? " (" + msg + ")" : "") + ". Cole uma chave válida.";
+  $("chaveErro").textContent = "Mangaba Router rejected your key" + (msg ? " (" + msg + ")" : "") + ". Paste a valid key.";
 }
 
 $("btnTrocarChave").onclick = () => {
@@ -530,10 +530,10 @@ $("btnSairChave").onclick = sair;
 $("btnExcluirConta").onclick = async () => {
   if (!account) return render();
   const senha = $("contaSenha").value;
-  if (!senha) { $("contaStatus").textContent = "Digite a senha para confirmar a exclusão."; return; }
-  if (!confirm("Excluir a conta e todos os dados sincronizados? Essa ação não pode ser desfeita.")) return;
+  if (!senha) { $("contaStatus").textContent = "Enter your password to confirm deletion."; return; }
+  if (!confirm("Delete the account and all synced data? This cannot be undone.")) return;
   try {
-    $("contaStatus").textContent = "Excluindo conta…";
+    $("contaStatus").textContent = "Deleting account…";
     const id = account.user.id;
     await accountDelete(account, senha);
     await hermesApagar();
@@ -542,9 +542,9 @@ $("btnExcluirConta").onclick = async () => {
     account = null;
     cfg.key = "";
     render();
-    $("entErro").textContent = "Conta excluída. O histórico deste navegador continua aqui até você limpá-lo.";
+    $("entErro").textContent = "Account deleted. History in this browser stays here until you clear it.";
   } catch (e) {
-    $("contaStatus").textContent = "Erro: " + e.message;
+    $("contaStatus").textContent = "Error: " + e.message;
   }
 };
 
@@ -558,7 +558,7 @@ setInterval(() => { if (account) syncPush(account, { recordsOnly: true }).catch(
     if ((await confirmarSessao(account)) === "expirada") {
       await accountSignOut();
       account = null;
-      $("entErro").textContent = "Sua sessão expirou. Entre de novo.";
+      $("entErro").textContent = "Your session expired. Sign in again.";
     } else {
       cfg.key = (await chaveLoad(account.user.id)) || (await chaveMigrar(account.user.id));
       syncPull(account).catch(() => {});

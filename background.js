@@ -432,7 +432,8 @@ const clearFn = (i) => {
 const clickTextFn = (texto) => {
   const alvo = String(texto).toLowerCase().trim();
   if (!alvo) return "texto vazio";
-  const SEL = 'a[href],button,input[type="submit"],input[type="button"],[role="button"],[role="link"],summary,label,[onclick]';
+  // inclui opções de listas customizadas (combobox, menus, abas) além de botões e links
+  const SEL = 'a[href],button,input[type="submit"],input[type="button"],[role="button"],[role="link"],[role="option"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="radio"],[role="switch"],summary,label,[onclick]';
   const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const rot = (el) => (el.innerText || el.value || el.getAttribute("aria-label") || el.title || "").toLowerCase().trim();
   const cand = [...document.querySelectorAll(SEL)].filter(vis);
@@ -571,7 +572,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (!dataUrl) dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 });
         out = { dataUrl };
       } else if (tool === "agora") {
-        out = "Data e hora atuais: " + new Date().toLocaleString("pt-BR", { dateStyle: "full", timeStyle: "short" });
+        out = "Current date and time: " + new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
       } else if (tool === "fechar_aba") {
         const id = +args.id;
         if (!id) out = "informe o id da aba (use listar_abas primeiro)";

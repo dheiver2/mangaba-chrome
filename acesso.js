@@ -44,16 +44,16 @@ async function chaveMigrar(userId) {
 // Confere a chave no Router. {ok:true} | {ok:false, motivo:"invalida"|"rede", erro}
 async function validarChaveRouter(chave) {
   chave = String(chave || "").trim();
-  if (!chave) return { ok: false, motivo: "invalida", erro: "Cole a sua chave do Mangaba Router." };
+  if (!chave) return { ok: false, motivo: "invalida", erro: "Paste your Mangaba Router key." };
   let res;
   try {
     res = await fetch(ROUTER_URL + "/v1/models", { headers: { Authorization: "Bearer " + chave } });
   } catch {
-    return { ok: false, motivo: "rede", erro: "Não consegui falar com o Mangaba Router. Confira a internet e tente de novo." };
+    return { ok: false, motivo: "rede", erro: "Could not reach Mangaba Router. Check your connection and try again." };
   }
   if (res.ok) return { ok: true };
-  if (res.status === 401 || res.status === 403) return { ok: false, motivo: "invalida", erro: "Chave inválida ou revogada. Confira no console do Router." };
-  return { ok: false, motivo: "rede", erro: "O Mangaba Router respondeu " + res.status + ". Tente de novo em instantes." };
+  if (res.status === 401 || res.status === 403) return { ok: false, motivo: "invalida", erro: "Invalid or revoked key. Check the Router console." };
+  return { ok: false, motivo: "rede", erro: "The Mangaba Router responded " + res.status + ". Try again shortly." };
 }
 
 // Confere a sessão salva. "ok" | "expirada" | "offline" (sem rede: mantém a sessão local).

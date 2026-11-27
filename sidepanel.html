@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Mangaba AI</title>
@@ -8,115 +8,115 @@
 <body>
 <header>
   <div class="logo"><img src="icons/mark.png" alt="mangaba.ai"> <span>mangaba<b>.ai</b></span></div>
-  <button id="btnSettings" class="hidden" title="Configurações">⚙</button>
+  <button id="btnSettings" class="hidden" title="Settings">⚙</button>
 </header>
 
 <section id="telaEntrada" class="tela hidden">
-  <h2>Entre na sua conta Mangaba</h2>
-  <p class="tela-sub">Para usar o agente, entre ou crie uma conta. Seu histórico e sua memória ficam salvos nela.</p>
+  <h2>Sign in to your Mangaba account</h2>
+  <p class="tela-sub">To use the agent, sign in or create an account. Your history and memory are saved to it.</p>
   <div class="abas" role="tablist">
-    <button id="abaEntrar" class="aba ativa" type="button" role="tab">Entrar</button>
-    <button id="abaCriar" class="aba" type="button" role="tab">Criar conta</button>
+    <button id="abaEntrar" class="aba ativa" type="button" role="tab">Sign in</button>
+    <button id="abaCriar" class="aba" type="button" role="tab">Create account</button>
   </div>
   <form id="formEntrada" novalidate>
-    <label id="rotuloNome" class="hidden">Nome
-      <input id="entNome" autocomplete="name" placeholder="seu nome">
+    <label id="rotuloNome" class="hidden">Name
+      <input id="entNome" autocomplete="name" placeholder="your name">
     </label>
-    <label>E-mail
-      <input id="entEmail" type="email" autocomplete="email" placeholder="voce@exemplo.com" required>
+    <label>Email
+      <input id="entEmail" type="email" autocomplete="email" placeholder="you@example.com" required>
     </label>
-    <label>Senha
-      <input id="entSenha" type="password" autocomplete="current-password" placeholder="mínimo 8 caracteres" required>
+    <label>Password
+      <input id="entSenha" type="password" autocomplete="current-password" placeholder="at least 8 characters" required>
     </label>
     <div id="entErro" class="tela-erro" role="alert"></div>
-    <button id="btnEntrada" class="tela-btn" type="submit">Continuar</button>
-    <button id="btnEsqueci" class="tela-link" type="button">Esqueci minha senha</button>
+    <button id="btnEntrada" class="tela-btn" type="submit">Continue</button>
+    <button id="btnEsqueci" class="tela-link" type="button">Forgot my password</button>
   </form>
 </section>
 
 <section id="telaChave" class="tela hidden">
-  <h2>Conecte sua chave do Mangaba Router</h2>
-  <p class="tela-sub">O agente usa a sua chave para chamar os modelos. Ela fica só neste navegador, ligada à sua conta.</p>
+  <h2>Connect your Mangaba Router key</h2>
+  <p class="tela-sub">The agent uses your key to call the models. It stays only in this browser, tied to your account.</p>
   <form id="formChave" novalidate>
-    <label>Chave do Mangaba Router
+    <label>Mangaba Router key
       <input id="chaveInput" type="password" autocomplete="off" placeholder="mr-..." required>
     </label>
     <div id="chaveErro" class="tela-erro" role="alert"></div>
-    <button id="btnValidarChave" class="tela-btn" type="submit">Validar e continuar</button>
+    <button id="btnValidarChave" class="tela-btn" type="submit">Validate and continue</button>
   </form>
-  <p class="tela-sub">Não tem chave? <a id="linkCriarChave" href="https://router.mangaba.ia.br/console" target="_blank" rel="noopener">Crie no console do Mangaba Router ↗</a></p>
-  <button id="btnSairChave" class="tela-link" type="button">Entrar com outra conta</button>
+  <p class="tela-sub">No key? <a id="linkCriarChave" href="https://router.mangaba.ia.br/console" target="_blank" rel="noopener">Create one in the Mangaba Router console ↗</a></p>
+  <button id="btnSairChave" class="tela-link" type="button">Sign in with another account</button>
 </section>
 
 <div id="pauseLogin" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999;">
   <div style="background: white; border-radius: 8px; padding: 24px; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-    <h2 style="margin: 0 0 16px 0; color: #333;">🔐 Login Necessário</h2>
-    <p style="margin: 0 0 20px 0; color: #666; line-height: 1.5;">Complete o login ou verificação de 2 passos no navegador, depois clique OK para continuar.</p>
-    <button id="btnLoginOK" style="background: #E94A12; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold;" type="button">✓ Pronto, continuar</button>
+    <h2 style="margin: 0 0 16px 0; color: #333;">🔐 Login required</h2>
+    <p style="margin: 0 0 20px 0; color: #666; line-height: 1.5;">Complete the login or 2-step verification in the browser, then click OK to continue.</p>
+    <button id="btnLoginOK" style="background: #E94A12; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold;" type="button">✓ Done, continue</button>
   </div>
 </div>
 
 <div id="settings" class="hidden">
   <section class="cfg-grupo" id="grpConta">
-    <h3>Conta</h3>
+    <h3>Account</h3>
     <div id="contaStatus" class="cfg-ajuda"></div>
     <div class="cfg-linha">
-      <button id="btnTrocarChave" type="button">Trocar chave do Router</button>
-      <button id="btnSair" type="button">Sair</button>
+      <button id="btnTrocarChave" type="button">Change Router key</button>
+      <button id="btnSair" type="button">Sign out</button>
     </div>
     <details>
-      <summary class="cfg-ajuda">Excluir conta</summary>
-      <label>Senha para confirmar
+      <summary class="cfg-ajuda">Delete account</summary>
+      <label>Password to confirm
         <input id="contaSenha" type="password" autocomplete="current-password">
       </label>
-      <button id="btnExcluirConta" class="btn-perigo" type="button">Excluir conta e dados sincronizados</button>
+      <button id="btnExcluirConta" class="btn-perigo" type="button">Delete account and synced data</button>
     </details>
   </section>
 
   <section class="cfg-grupo">
-    <h3>Agente</h3>
-    <label class="switch-linha">Mostrar a seta na página
+    <h3>Agent</h3>
+    <label class="switch-linha">Show the arrow on the page
       <input id="cfgSetas" class="switch" type="checkbox" checked>
     </label>
-    <label>Meus dados
-      <span class="cfg-ajuda">Um por linha, como <code>nome: valor</code>. O agente só vê os nomes (por exemplo {{email}}); o valor vai direto à página e nunca ao modelo.</span>
-      <textarea id="cfgDados" rows="3" placeholder="nome: João Silva&#10;email: joao@exemplo.com&#10;telefone: 82 99999-0000"></textarea>
+    <label>My data
+      <span class="cfg-ajuda">One per line, as <code>name: value</code>. The agent only sees the names (for example {{email}}); the value goes straight to the page and never to the model.</span>
+      <textarea id="cfgDados" rows="3" placeholder="name: John Smith&#10;email: john@example.com&#10;phone: 555 0100"></textarea>
     </label>
   </section>
 
   <details class="cfg-grupo">
-    <summary><h3>Avançado</h3></summary>
+    <summary><h3>Advanced</h3></summary>
     <section class="cfg-grupo" id="grpMcp">
-      <h3>Clientes externos (Claude Code, Codex)</h3>
-      <div class="cfg-ajuda">Leitura só observa a página. Ações também clicam, digitam e navegam.</div>
-      <select id="mcpEscopo"><option value="leitura">Somente leitura</option><option value="acoes">Ações na página</option></select>
+      <h3>External clients (Claude Code, Codex)</h3>
+      <div class="cfg-ajuda">Read-only just observes the page. Actions also click, type and navigate.</div>
+      <select id="mcpEscopo"><option value="leitura">Read-only</option><option value="acoes">Page actions</option></select>
       <div class="cfg-linha">
-        <button id="btnGerarToken" type="button">Gerar token</button>
-        <button id="btnRevogarToken" type="button">Revogar</button>
+        <button id="btnGerarToken" type="button">Generate token</button>
+        <button id="btnRevogarToken" type="button">Revoke</button>
       </div>
       <pre id="mcpSaida" class="cfg-saida"></pre>
     </section>
-    <button id="btnClearHistory" class="btn-perigo" type="button">Limpar histórico</button>
+    <button id="btnClearHistory" class="btn-perigo" type="button">Clear history</button>
   </details>
 
-  <div class="cfg-rodape"><button id="btnSave" type="button">Salvar</button></div>
+  <div class="cfg-rodape"><button id="btnSave" type="button">Save</button></div>
 </div>
 
 <main id="chat" class="hidden">
   <div class="arow"><img class="avatar" src="icons/mark.png" alt="">
-    <div class="msg assistant"><p>Olá! Sou a <b>Mangaba</b>. Peça uma tarefa (ex.: <i>"resuma esta página"</i>, <i>"comente no primeiro vídeo"</i>) que eu controlo o navegador para você.</p></div>
+    <div class="msg assistant"><p>Hi! I'm <b>Mangaba</b>. Ask for a task (e.g. <i>"summarize this page"</i>, <i>"comment on the first video"</i>) and I'll control the browser for you.</p></div>
   </div>
 </main>
 
 <footer id="rodapeChat" class="hidden">
   <div class="ctxrow">
-    <label class="ctx" title="O texto da aba aberta vai junto com cada pedido"><input type="checkbox" id="ctxPagina" checked> 📄 Ler a página aberta</label>
+    <label class="ctx" title="The text of the open tab is sent with each request"><input type="checkbox" id="ctxPagina" checked> 📄 Read the open page</label>
   </div>
   <div class="inputrow">
-    <textarea id="input" rows="2" placeholder="Peça uma tarefa..."></textarea>
+    <textarea id="input" rows="2" placeholder="Ask for a task..."></textarea>
     <button id="btnSend">↑</button>
   </div>
-  <div class="hint">Modo agente: a Mangaba controla o navegador para completar a tarefa.</div>
+  <div class="hint">Agent mode: Mangaba controls the browser to complete the task.</div>
 </footer>
 
 <script src="db.js"></script>
