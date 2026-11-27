@@ -9,7 +9,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // Desde 10/11/2026 o banco é o Postgres próprio na PoC Golden, por WebSocket em db.mangaba.ia.br
 // (DB_URL + DB_WS_PROXY). Sem DB_WS_PROXY segue o pg por TCP (testes locais e o Neon antigo).
 export function createPool(connectionString = process.env.DB_URL || process.env.DATABASE_URL) {
-  if (!connectionString) throw new Error("DATABASE_URL não definida");
+  if (!connectionString) throw new Error("DATABASE_URL not set");
   if (process.env.DB_WS_PROXY) {
     neonConfig.wsProxy = process.env.DB_WS_PROXY;
     neonConfig.useSecureWebSocket = true;

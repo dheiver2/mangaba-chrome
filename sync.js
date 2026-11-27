@@ -25,10 +25,10 @@ async function accountRequest(apiUrl, path, { method = "GET", body, token } = {}
   try {
     res = await fetch(apiUrl.replace(/\/+$/, "") + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   } catch {
-    throw new Error("não foi possível conectar ao servidor da conta (" + apiUrl + ")");
+    throw new Error("could not connect to the account server (" + apiUrl + ")");
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "erro " + res.status);
+  if (!res.ok) throw new Error(data.error || "error " + res.status);
   return data;
 }
 

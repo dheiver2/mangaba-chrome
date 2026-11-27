@@ -1,11 +1,36 @@
-# Mangaba AI — textos para a Chrome Web Store (pt-BR)
+# Mangaba AI — texts for the Chrome Web Store (en)
 
-**Nome:** Mangaba AI
+**Name:** Mangaba AI
 
-**Resumo curto (até 132 caracteres):**
-Assistente brasileira no navegador: lê, preenche e clica nas páginas que você está vendo, a seu pedido.
+**Short summary (up to 132 characters):**
+AI assistant in your browser: reads, fills in and clicks on the pages you are viewing, on request.
 
-**Descrição** (o texto abaixo, até "Detalhes na política de privacidade."; está pronto para colar em descricao-para-colar.txt):
+**Description** (the text below, up to "Details in the privacy policy."; ready to paste, see descricao-para-colar.txt):
+
+Mangaba AI is an assistant that works on the page you are viewing. You describe the task in the side panel, and the agent reads the page, fills in forms, navigates between pages, clicks buttons and confirms the result before replying.
+
+What it does:
+- Read and summarize the current page, including documents and tables.
+- Fill in forms with the data you provide, without submitting anything without your confirmation.
+- Navigate between pages and open links needed for the task.
+- Click and type in page elements, with the result checked on the page itself.
+- Write in editors such as Google Docs, where the cursor is.
+- Remember information you ask it to keep, such as preferences and registration data.
+
+How it works:
+- The agent's reasoning runs on Mangaba servers in Brazil. The extension sends the task and the page content needed for it.
+- To use it, you sign in with a Mangaba account and connect your own Mangaba Router key. The key is checked against the Router and stays only in this browser, tied to your account.
+- History and memory live in your account and are synced across your browsers.
+- You choose the conversation engine in settings: Hermes (default) or Claude Code, both through the Mangaba Router.
+- Optional: generate a token to use your tab from Claude Code or Codex on your computer, with read or action scope. The token can be revoked at any time.
+
+Privacy and control:
+- The extension does not store passwords or cards. When a page asks for login, the agent stops and asks you to sign in.
+- Actions that send messages, make purchases or publish content ask for your confirmation first.
+- You can delete your history and account at any time, and the data leaves the servers along with the account.
+- On the first task, the extension tells you what is sent to the server before starting.
+
+Details in the privacy policy."; está pronto para colar em descricao-para-colar.txt):
 
 O Mangaba AI é um assistente que trabalha na página que você está vendo. Você descreve a tarefa no painel lateral, e o agente lê a página, preenche formulários, navega entre páginas, clica em botões e confirma o resultado antes de responder.
 
@@ -29,6 +54,6 @@ Privacidade e controle:
 
 Detalhes na política de privacidade.
 
-**Categoria:** Produtividade
+**Category:** Productivity
 
-**Idioma principal:** Português (Brasil)
+**Primary language:** English

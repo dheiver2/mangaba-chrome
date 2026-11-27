@@ -37,7 +37,7 @@ function readBody(req) {
     const chunks = [];
     req.on("data", (c) => {
       size += c.length;
-      if (size > MAX_BODY) { reject(new HttpError(413, "requisição grande demais")); req.destroy(); return; }
+      if (size > MAX_BODY) { reject(new HttpError(413, "request too large")); req.destroy(); return; }
       chunks.push(c);
     });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
@@ -55,7 +55,7 @@ const sha256 = (texto) => createHash("sha256").update(texto).digest("hex");
 // Envio pelo Resend. Só roda com RESEND_API_KEY definida; o remetente vem de RESEND_FROM.
 export async function enviarPeloResend({ para, assunto, html }) {
   const chave = process.env.RESEND_API_KEY;
-  if (!chave) throw new Error("RESEND_API_KEY não definida");
+  if (!chave) throw new Error("RESEND_API_KEY not set");
   const resposta = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${chave}`, "Content-Type": "application/json" },
@@ -64,13 +64,13 @@ export async function enviarPeloResend({ para, assunto, html }) {
       to: [para], subject: assunto, html,
     }),
   });
-  if (!resposta.ok) throw new Error(`Resend respondeu ${resposta.status}`);
+  if (!resposta.ok) throw new Error(`Resend responded ${resposta.status}`);
 }
 
-const PAGINA_REDEFINIR = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Redefinir senha · Mangaba AI</title>
+const PAGINA_REDEFINIR = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reset password · Mangaba AI</title>
 <style>body{font:16px/1.5 system-ui,sans-serif;background:#FBF7F2;color:#1E0D01;margin:0;padding:40px 16px}main{max-width:380px;margin:0 auto;background:#fff;border:1px solid #EADFD6;border-radius:14px;padding:28px}h1{font-size:22px;margin:0 0 12px}input{width:100%;box-sizing:border-box;padding:10px;border:1px solid #d8c9bb;border-radius:8px;font-size:16px;margin:6px 0 14px}button{background:#E94A12;color:#fff;border:0;border-radius:8px;padding:12px 18px;font-weight:600;font-size:15px;width:100%;cursor:pointer}p{margin:12px 0 0;font-size:14px}</style></head>
-<body><main><h1>Escolha uma nova senha</h1><form id="f"><label>Nova senha (mínimo 8 caracteres)<input id="s" type="password" minlength="8" required autocomplete="new-password"></label><button>Salvar senha</button></form><p id="m"></p></main>
-<script>const token=new URLSearchParams(location.search).get("token")||"";document.getElementById("f").onsubmit=async(e)=>{e.preventDefault();const m=document.getElementById("m");m.textContent="Salvando…";const r=await fetch("/auth/redefinir",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,password:document.getElementById("s").value})});const d=await r.json().catch(()=>({}));m.textContent=r.ok?"Senha alterada. Pode entrar na extensão com a nova senha.":(d.error||"Não foi possível salvar.");};</script></body></html>`;
+<body><main><h1>Choose a new password</h1><form id="f"><label>New password (at least 8 characters)<input id="s" type="password" minlength="8" required autocomplete="new-password"></label><button>Save password</button></form><p id="m"></p></main>
+<script>const token=new URLSearchParams(location.search).get("token")||"";document.getElementById("f").onsubmit=async(e)=>{e.preventDefault();const m=document.getElementById("m");m.textContent="Saving…";const r=await fetch("/auth/redefinir",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,password:document.getElementById("s").value})});const d=await r.json().catch(()=>({}));m.textContent=r.ok?"Password changed. You can now sign in to the extension with the new password.":(d.error||"Could not save.");};</script></body></html>`;
 
 export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend }) {
   if (!jwtSecret || jwtSecret.length < 32) throw new Error("JWT_SECRET precisa ter pelo menos 32 caracteres");
@@ -84,7 +84,7 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
       "select count(*)::int as n from auth_tentativas where ip = $1 and ts >= now() - $2::interval",
       [ip, janela],
     );
-    if (rows[0].n >= AUTH_MAX_TRIES) throw new HttpError(429, "muitas tentativas; aguarde alguns minutos");
+    if (rows[0].n >= AUTH_MAX_TRIES) throw new HttpError(429, "too many attempts; wait a few minutes");
     await pool.query("insert into auth_tentativas (ip) values ($1)", [ip]);
   }
 
@@ -92,7 +92,7 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
   async function pedirRedefinicao(body, ip) {
     await limitAuth(ip);
     const email = String(body.email || "").trim().toLowerCase();
-    const resposta = { ok: true, mensagem: "Se o e-mail estiver cadastrado, enviamos um link para criar uma nova senha." };
+    const resposta = { ok: true, mensagem: "If the email is registered, we sent a link to create a new password." };
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return resposta;
     const { rows } = await pool.query("select id, email from users where email = $1", [email]);
     if (!rows[0]) return resposta; // mesma resposta para e-mail inexistente: não revela contas
@@ -105,8 +105,8 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
     try {
       await enviarEmail({
         para: rows[0].email,
-        assunto: "Redefinir sua senha da Mangaba AI",
-        html: `<p>Use o link abaixo para criar uma nova senha. Ele vale por 30 minutos e funciona uma vez.</p><p><a href="${link}">${link}</a></p><p>Se você não pediu isso, ignore este e-mail.</p>`,
+        assunto: "Reset your Mangaba AI password",
+        html: `<p>Use the link below to create a new password. It is valid for 30 minutes and works once.</p><p><a href="${link}">${link}</a></p><p>If you did not request this, ignore this email.</p>`,
       });
     } catch (e) {
       console.error("falha ao enviar o e-mail de redefinição:", e.message);
@@ -117,13 +117,13 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
   async function redefinirSenha(body) {
     const token = String(body.token || "");
     const password = String(body.password || "");
-    if (password.length < 8 || password.length > 200) throw new HttpError(400, "a senha precisa ter de 8 a 200 caracteres");
-    if (!token || token.length > 200) throw new HttpError(400, "link inválido ou expirado");
+    if (password.length < 8 || password.length > 200) throw new HttpError(400, "the password must be 8 to 200 characters");
+    if (!token || token.length > 200) throw new HttpError(400, "invalid or expired link");
     const { rows } = await pool.query(
       "select user_id from password_resets where token_hash = $1 and used_at is null and expires_at > now()",
       [sha256(token)],
     );
-    if (!rows[0]) throw new HttpError(400, "link inválido ou expirado");
+    if (!rows[0]) throw new HttpError(400, "invalid or expired link");
     const hash = await bcrypt.hash(password, 12);
     await pool.query("update users set password_hash = $1 where id = $2", [hash, rows[0].user_id]);
     await pool.query("update password_resets set used_at = now() where user_id = $1", [rows[0].user_id]);
@@ -133,12 +133,12 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
   function userFromAuth(req) {
     const h = req.headers.authorization || "";
     const token = h.startsWith("Bearer ") ? h.slice(7) : "";
-    if (!token) throw new HttpError(401, "faça login");
+    if (!token) throw new HttpError(401, "sign in required");
     try {
       const claims = jwt.verify(token, jwtSecret);
       return { id: claims.sub, email: claims.email };
     } catch {
-      throw new HttpError(401, "sessão inválida ou expirada; faça login de novo");
+      throw new HttpError(401, "invalid or expired session; sign in again");
     }
   }
 
@@ -150,8 +150,8 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
     const email = String(body.email || "").trim().toLowerCase();
     const name = String(body.name || "").trim().slice(0, 80);
     const password = String(body.password || "");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "e-mail inválido");
-    if (password.length < 8 || password.length > 200) throw new HttpError(400, "a senha precisa ter de 8 a 200 caracteres");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "invalid email");
+    if (password.length < 8 || password.length > 200) throw new HttpError(400, "the password must be 8 to 200 characters");
     const hash = await bcrypt.hash(password, 12);
     try {
       const { rows } = await pool.query(
@@ -160,7 +160,7 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
       );
       return { token: issue(rows[0]), user: publicUser(rows[0]) };
     } catch (e) {
-      if (e.code === "23505") throw new HttpError(409, "já existe uma conta com este e-mail");
+      if (e.code === "23505") throw new HttpError(409, "an account with this email already exists");
       throw e;
     }
   }
@@ -173,7 +173,7 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
     // Mesma mensagem para e-mail inexistente e senha errada, e bcrypt roda nos dois casos.
     const row = rows[0];
     const valid = await bcrypt.compare(password, row ? row.password_hash : "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv");
-    if (!row || !valid) throw new HttpError(401, "e-mail ou senha incorretos");
+    if (!row || !valid) throw new HttpError(401, "incorrect email or password");
     return { token: issue(row), user: publicUser(row) };
   }
 
@@ -184,9 +184,9 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
   }
 
   async function putSync(user, kind, body) {
-    if (body.payload === undefined) throw new HttpError(400, "falta o campo payload");
+    if (body.payload === undefined) throw new HttpError(400, "missing payload field");
     const json = JSON.stringify(body.payload);
-    if (json.length > MAX_PAYLOAD) throw new HttpError(413, "dados grandes demais para sincronizar");
+    if (json.length > MAX_PAYLOAD) throw new HttpError(413, "data too large to sync");
     const { rows } = await pool.query(
       `insert into user_data (user_id, kind, payload, updated_at) values ($1, $2, $3, now())
        on conflict (user_id, kind) do update set payload = excluded.payload, updated_at = now()
@@ -216,7 +216,7 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
       const corpo = JSON.parse((await readBody(req)) || "{}");
       const { rows } = await pool.query("select password_hash from users where id = $1", [u.id]);
       if (!rows[0] || !(await bcrypt.compare(String(corpo.password || ""), rows[0].password_hash))) {
-        throw new HttpError(401, "senha incorreta");
+        throw new HttpError(401, "incorrect password");
       }
       await pool.query("delete from users where id = $1", [u.id]);
       return send(res, origin, 200, { ok: true });
@@ -224,20 +224,20 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
     if (req.method === "GET" && path === "/auth/me") {
       const u = userFromAuth(req);
       const { rows } = await pool.query("select id, email, name from users where id = $1", [u.id]);
-      if (!rows[0]) throw new HttpError(401, "conta não existe mais");
+      if (!rows[0]) throw new HttpError(401, "account no longer exists");
       return send(res, origin, 200, { user: publicUser(rows[0]) });
     }
 
     const m = path.match(/^\/sync\/([a-z]+)$/);
     if (m) {
-      if (!KINDS.includes(m[1])) throw new HttpError(404, "tipo de dado desconhecido");
+      if (!KINDS.includes(m[1])) throw new HttpError(404, "unknown data type");
       const user = userFromAuth(req);
       if (req.method === "GET") return send(res, origin, 200, await getSync(user, m[1]));
       if (req.method === "PUT") return send(res, origin, 200, await putSync(user, m[1], JSON.parse(await readBody(req) || "{}")));
     }
 
     if (req.method === "GET" && path === "/health") return send(res, origin, 200, { ok: true });
-    throw new HttpError(404, "rota não encontrada");
+    throw new HttpError(404, "route not found");
   }
 
   return async (req, res) => {
@@ -248,9 +248,9 @@ export function createHandler({ pool, jwtSecret, enviarEmail = enviarPeloResend 
       await route(req, res, url, origin);
     } catch (e) {
       if (e instanceof HttpError) return send(res, origin, e.status, { error: e.message });
-      if (e instanceof SyntaxError) return send(res, origin, 400, { error: "JSON inválido" });
+      if (e instanceof SyntaxError) return send(res, origin, 400, { error: "invalid JSON" });
       console.error("erro interno:", e);
-      return send(res, origin, 500, { error: "erro interno" });
+      return send(res, origin, 500, { error: "internal error" });
     }
   };
 }

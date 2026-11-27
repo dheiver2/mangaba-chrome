@@ -572,7 +572,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (!dataUrl) dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 70 });
         out = { dataUrl };
       } else if (tool === "agora") {
-        out = "Data e hora atuais: " + new Date().toLocaleString("pt-BR", { dateStyle: "full", timeStyle: "short" });
+        out = "Current date and time: " + new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
       } else if (tool === "fechar_aba") {
         const id = +args.id;
         if (!id) out = "informe o id da aba (use listar_abas primeiro)";

@@ -14,7 +14,7 @@ export default async function main(req, res) {
   } catch (e) {
     console.error("falha ao preparar o banco:", e);
     res.writeHead(500, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ error: "banco indisponível" }));
+    return res.end(JSON.stringify({ error: "database unavailable" }));
   }
   return handler(req, res);
 }
