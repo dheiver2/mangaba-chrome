@@ -432,7 +432,8 @@ const clearFn = (i) => {
 const clickTextFn = (texto) => {
   const alvo = String(texto).toLowerCase().trim();
   if (!alvo) return "texto vazio";
-  const SEL = 'a[href],button,input[type="submit"],input[type="button"],[role="button"],[role="link"],summary,label,[onclick]';
+  // inclui opções de listas customizadas (combobox, menus, abas) além de botões e links
+  const SEL = 'a[href],button,input[type="submit"],input[type="button"],[role="button"],[role="link"],[role="option"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="radio"],[role="switch"],summary,label,[onclick]';
   const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
   const rot = (el) => (el.innerText || el.value || el.getAttribute("aria-label") || el.title || "").toLowerCase().trim();
   const cand = [...document.querySelectorAll(SEL)].filter(vis);

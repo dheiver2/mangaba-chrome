@@ -1,0 +1,98 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><title>teste-avancado</title>
+<style>body{font-family:sans-serif;padding:20px} .bloco{margin:16px 0;border:1px solid #ccc;padding:8px}
+[contenteditable]{min-height:40px;border:1px solid #888;padding:6px}
+.lista{max-height:120px;overflow:auto;border:1px solid #888}
+.dialogo{display:none;position:fixed;top:30%;left:30%;background:#fff;border:2px solid #000;padding:16px}
+.dialogo.aberto{display:block}
+.combo{position:relative;display:inline-block}
+.opcoes{display:none;position:absolute;background:#fff;border:1px solid #444}
+.opcoes.aberto{display:block}
+.opcoes div{padding:4px 12px;cursor:pointer}
+.fundo{height:900px}</style></head>
+<body>
+<h1>Página de teste avançado</h1>
+
+<div class="bloco"><h2>1. Iframe</h2>
+<iframe id="quadro" title="quadro-interno" style="width:400px;height:90px" srcdoc="<button id=&quot;dentro&quot; onclick=&quot;this.textContent='clicado no iframe'&quot;>Botão no iframe</button><input id=&quot;campo-dentro&quot; placeholder=&quot;campo no iframe&quot;>"></iframe>
+</div>
+
+<div class="bloco"><h2>2. Shadow DOM</h2>
+<sombra-widget></sombra-widget>
+</div>
+
+<div class="bloco"><h2>3. Editor de texto rico (contenteditable)</h2>
+<div id="editor" contenteditable="true" aria-label="Editor de texto"></div>
+<p id="editor-resultado">vazio</p>
+</div>
+
+<div class="bloco"><h2>4. Combobox customizado</h2>
+<div class="combo">
+  <button id="abre-combo" aria-haspopup="listbox" aria-expanded="false">Escolha a cidade</button>
+  <div id="opcoes-combo" class="opcoes" role="listbox">
+    <div role="option">Maceió</div><div role="option">Recife</div><div role="option">Salvador</div>
+  </div>
+</div>
+<p id="combo-resultado">nenhuma</p>
+</div>
+
+<div class="bloco"><h2>5. Select nativo</h2>
+<select id="uf" aria-label="Estado"><option value="">Selecione</option><option value="AL">Alagoas</option><option value="PE">Pernambuco</option></select>
+<p id="uf-resultado">nenhum</p>
+</div>
+
+<div class="bloco"><h2>6. Lista com carregamento ao rolar</h2>
+<div id="lista-infinita" class="lista"></div>
+<p id="lista-total">0</p>
+</div>
+
+<div class="bloco"><h2>7. Modal</h2>
+<button id="abre-modal">Abrir modal</button>
+<div id="modal" class="dialogo" role="dialog" aria-modal="true" aria-label="Confirmação">
+  <p>Tem certeza?</p><button id="modal-ok">Sim, confirmar</button>
+</div>
+<p id="modal-resultado">fechado</p>
+</div>
+
+<div class="fundo"></div>
+<div class="bloco" id="fim"><h2>8. Elemento no fim da página</h2>
+<button id="botao-fim">Botão lá embaixo</button><p id="fim-resultado">não clicado</p>
+</div>
+
+<script>
+// 3. editor: grava o texto do contenteditable
+document.getElementById('editor').addEventListener('input', e => {
+  document.getElementById('editor-resultado').textContent = e.target.textContent;
+});
+// 4. combobox
+const abre = document.getElementById('abre-combo'), opc = document.getElementById('opcoes-combo');
+abre.addEventListener('click', () => { opc.classList.toggle('aberto'); abre.setAttribute('aria-expanded', opc.classList.contains('aberto')); });
+opc.addEventListener('click', e => {
+  if (e.target.role === 'option' || e.target.getAttribute('role') === 'option') {
+    document.getElementById('combo-resultado').textContent = e.target.textContent;
+    abre.textContent = e.target.textContent; opc.classList.remove('aberto');
+  }
+});
+// 5. select
+document.getElementById('uf').addEventListener('change', e => { document.getElementById('uf-resultado').textContent = e.target.value; });
+// 6. lista infinita
+const lista = document.getElementById('lista-infinita'); let n = 0;
+function mais() { for (let i = 0; i < 20; i++) { n++; const d = document.createElement('div'); d.textContent = 'Item ' + n; lista.appendChild(d); } document.getElementById('lista-total').textContent = n; }
+mais();
+lista.addEventListener('scroll', () => { if (lista.scrollTop + lista.clientHeight >= lista.scrollHeight - 5 && n < 100) mais(); });
+// 7. modal
+document.getElementById('abre-modal').addEventListener('click', () => document.getElementById('modal').classList.add('aberto'));
+document.getElementById('modal-ok').addEventListener('click', () => { document.getElementById('modal-resultado').textContent = 'confirmado'; document.getElementById('modal').classList.remove('aberto'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.getElementById('modal').classList.remove('aberto'); });
+// 8. fim
+document.getElementById('botao-fim').addEventListener('click', () => { document.getElementById('fim-resultado').textContent = 'clicado'; });
+// 2. shadow DOM
+class SombraWidget extends HTMLElement {
+  connectedCallback() {
+    const r = this.attachShadow({ mode: 'open' });
+    r.innerHTML = '<button id="sombra-btn">Botão no shadow</button><span id="sombra-st">parado</span>';
+    r.getElementById('sombra-btn').addEventListener('click', () => { r.getElementById('sombra-st').textContent = 'clicado no shadow'; });
+  }
+}
+customElements.define('sombra-widget', SombraWidget);
+</script>
+</body></html>
